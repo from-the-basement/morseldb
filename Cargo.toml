@@ -45,10 +45,11 @@ tonbo_marco = { path = "tonbo_marco" }
 tracing = "0.1"
 ulid = "1"
 
-
 [dev-dependencies]
 bincode = "1"
+comfy-table = "7"
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+fastrand = "2"
 redb = "2"
 serde = "1"
 tempfile = "3"

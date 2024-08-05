@@ -72,7 +72,7 @@ pub trait BenchReader {
     fn range_from<'a>(
         &'a self,
         range: (Bound<&'a ItemKey>, Bound<&'a ItemKey>),
-    ) -> impl Stream<Item = Option<BenchItem>> + 'a;
+    ) -> impl Stream<Item = BenchItem> + 'a;
 }
 
 pub struct TonboBenchDataBase<'a> {
@@ -95,7 +95,9 @@ impl<'a> BenchDatabase for TonboBenchDataBase<'a> {
     }
 
     async fn write_transaction(&self) -> Self::W<'_> {
-        todo!()
+        TonboBenchWriteTransaction {
+            txn: self.db.transaction().await,
+        }
     }
 
     async fn read_transaction(&self) -> Self::R<'_> {
@@ -138,17 +140,19 @@ impl BenchReader for TonboBenchReader<'_, '_> {
     fn range_from<'a>(
         &'a self,
         range: (Bound<&'a ItemKey>, Bound<&'a ItemKey>),
-    ) -> impl Stream<Item = Option<BenchItem>> + 'a {
+    ) -> impl Stream<Item = BenchItem> + 'a {
         stream! {
             let mut stream = self.txn.scan(range).await.take().await.unwrap();
 
             while let Some(result) = stream.next().await {
-                yield result.unwrap().value().map(|item_ref| BenchItem {
-                    primary_key: item_ref.primary_key.to_key(),
-                    string: item_ref.string.unwrap().to_string(),
-                    u32: item_ref.u32.unwrap(),
-                    boolean: item_ref.boolean.unwrap(),
-                });
+                if let Some(item_ref) = result.unwrap().value() {
+                    yield BenchItem {
+                        primary_key: item_ref.primary_key.to_key(),
+                        string: item_ref.string.unwrap().to_string(),
+                        u32: item_ref.u32.unwrap(),
+                        boolean: item_ref.boolean.unwrap(),
+                    };
+                }
             }
         }
     }
@@ -245,7 +249,7 @@ impl BenchReader for RedbBenchReader {
     fn range_from<'a>(
         &'a self,
         range: (Bound<&'a ItemKey>, Bound<&'a ItemKey>),
-    ) -> impl Stream<Item = Option<BenchItem>> + 'a {
+    ) -> impl Stream<Item = BenchItem> + 'a {
         let (lower, upper) = range;
         let mut iter = self
             .table
@@ -253,10 +257,10 @@ impl BenchReader for RedbBenchReader {
             .unwrap();
 
         stream! {
-            yield iter.next().map(|result| {
-                let (_, v) = result.unwrap();
-                bincode::deserialize(v.value()).unwrap()
-            })
+            while let Some(item) = iter.next() {
+                let (_, v) = item.unwrap();
+                yield bincode::deserialize(v.value()).unwrap()
+            }
         }
     }
 }
