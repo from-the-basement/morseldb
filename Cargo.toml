@@ -14,6 +14,15 @@ name = "declare"
 path = "examples/declare.rs"
 required-features = ["tokio"]
 
+[[bench]]
+name = "benchmark"
+path = "benchmark/bench.rs"
+harness = false
+required-features = ["tokio"]
+
+[target.'cfg(unix)'.dependencies]
+pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
+
 [dependencies]
 arrow = "52"
 async-lock = "3"
@@ -38,6 +47,10 @@ ulid = "1"
 
 
 [dev-dependencies]
+bincode = "1"
+criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+redb = "2"
+serde = "1"
 tempfile = "3"
 tokio = { version = "1", features = ["full"] }
 

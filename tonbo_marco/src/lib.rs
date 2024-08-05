@@ -22,9 +22,22 @@ enum DataType {
 }
 
 #[proc_macro_attribute]
-pub fn tonbo_record(_args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn tonbo_record(args: TokenStream, input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let struct_name = ast.ident.clone();
+
+    let mut combined_derives = vec![quote!(
+        tonbo_marco::KeyAttributes,
+        Debug,
+        PartialEq,
+        Eq,
+        Clone
+    )];
+
+    let additional_attrs = args.to_string();
+    if !additional_attrs.is_empty() {
+        combined_derives.push(additional_attrs.parse().unwrap());
+    }
 
     let mut primary_key_definitions = None;
 
@@ -310,8 +323,10 @@ pub fn tonbo_record(_args: TokenStream, input: TokenStream) -> TokenStream {
                             builder_push_some_fields.push(quote! {
                                 self.#field_name.append_value(row.#field_name.unwrap());
                             });
-                            builder_push_none_fields.push(quote! {
-                                self.#field_name.append_value(Default::default());
+                            builder_push_none_fields.push(if is_string {
+                                quote!(self.#field_name.append_value("");)
+                            } else {
+                                quote!(self.#field_name.append_value(Default::default());)
                             });
                             decode_method_fields.push(quote! {
                                 let #field_name = Option::<#field_ty>::decode(reader).await.map_err(|err| ::tonbo::record::RecordDecodeError::Decode {
@@ -393,7 +408,7 @@ pub fn tonbo_record(_args: TokenStream, input: TokenStream) -> TokenStream {
     let struct_builder_name = Ident::new(&format!("{}Builder", struct_name), struct_name.span());
 
     let gen = quote! {
-        #[derive(tonbo_marco::KeyAttributes, Debug, PartialEq, Eq, Clone)]
+        #[derive(#(#combined_derives),*)]
         #ast
 
         impl ::tonbo::record::Record for #struct_name {

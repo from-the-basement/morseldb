@@ -119,9 +119,9 @@ pub mod option;
 pub mod record;
 mod scope;
 pub mod serdes;
-mod stream;
+pub mod stream;
 pub mod timestamp;
-mod transaction;
+pub mod transaction;
 mod version;
 mod wal;
 
