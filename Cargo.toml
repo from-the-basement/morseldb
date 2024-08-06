@@ -51,7 +51,9 @@ comfy-table = "7"
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
 fastrand = "2"
 redb = "2"
+rocksdb = "0.22"
 serde = "1"
+sled = "0.34"
 tempfile = "3"
 tokio = { version = "1", features = ["full"] }
 

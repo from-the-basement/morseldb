@@ -1,10 +1,11 @@
-use std::collections::Bound;
+use std::{collections::Bound, fs, fs::File, path::Path};
 
 use async_stream::stream;
 use futures_core::Stream;
 use futures_util::StreamExt;
 use parquet::data_type::AsBytes;
 use redb::TableDefinition;
+use rocksdb::{Direction, IteratorMode, TransactionDB};
 use tonbo::{executor::tokio::TokioExecutor, record::KeyRef, Projection};
 use tonbo_marco::tonbo_record;
 
@@ -302,5 +303,277 @@ impl BenchInserter for RedbBenchInserter<'_> {
             .remove(key.as_bytes())
             .map(|_| ())
             .map_err(|_| ())
+    }
+}
+
+pub struct SledBenchDatabase<'a> {
+    db: &'a sled::Db,
+    db_dir: &'a Path,
+}
+
+impl<'a> SledBenchDatabase<'a> {
+    pub fn new(db: &'a sled::Db, path: &'a Path) -> Self {
+        SledBenchDatabase { db, db_dir: path }
+    }
+}
+
+impl<'a> BenchDatabase for SledBenchDatabase<'a> {
+    type W<'db>
+    = SledBenchWriteTransaction<'db>
+    where
+        Self: 'db;
+    type R<'db>
+    = SledBenchReadTransaction<'db>
+    where
+        Self: 'db;
+
+    fn db_type_name() -> &'static str {
+        "sled"
+    }
+
+    async fn write_transaction(&self) -> Self::W<'_> {
+        SledBenchWriteTransaction {
+            db: &self.db,
+            db_dir: &self.db_dir,
+        }
+    }
+
+    async fn read_transaction(&self) -> Self::R<'_> {
+        SledBenchReadTransaction { db: &self.db }
+    }
+}
+
+pub struct SledBenchReadTransaction<'db> {
+    db: &'db sled::Db,
+}
+
+impl BenchReadTransaction for SledBenchReadTransaction<'_> {
+    type T<'txn>
+    = SledBenchReader<'txn>
+    where
+        Self: 'txn;
+
+    fn get_reader(&self) -> Self::T<'_> {
+        SledBenchReader { db: &self.db }
+    }
+}
+
+pub struct SledBenchReader<'db> {
+    db: &'db sled::Db,
+}
+
+impl<'db> BenchReader for SledBenchReader<'db> {
+    async fn get<'a>(&'a self, key: &'a ItemKey) -> Option<BenchItem> {
+        self.db
+            .get(key.as_bytes())
+            .unwrap()
+            .map(|guard| bincode::deserialize::<BenchItem>(guard.as_bytes()).unwrap())
+    }
+
+    fn range_from<'a>(
+        &'a self,
+        range: (Bound<&'a ItemKey>, Bound<&'a ItemKey>),
+    ) -> impl Stream<Item = BenchItem> + 'a {
+        let (lower, upper) = range;
+        let mut iter = self.db.range::<&[u8], (Bound<&[u8]>, Bound<&[u8]>)>((
+            lower.map(ItemKey::as_bytes),
+            upper.map(ItemKey::as_bytes),
+        ));
+
+        stream! {
+            while let Some(item) = iter.next() {
+                let (_, v) = item.unwrap();
+                yield bincode::deserialize(v.as_bytes()).unwrap()
+            }
+        }
+    }
+}
+
+pub struct SledBenchWriteTransaction<'a> {
+    db: &'a sled::Db,
+    db_dir: &'a Path,
+}
+
+impl BenchWriteTransaction for SledBenchWriteTransaction<'_> {
+    type W<'txn>
+    = SledBenchInserter<'txn>
+    where
+        Self: 'txn;
+
+    fn get_inserter(&mut self) -> Self::W<'_> {
+        SledBenchInserter { db: &self.db }
+    }
+
+    async fn commit(self) -> Result<(), ()> {
+        self.db.flush().unwrap();
+        // Workaround for sled durability
+        // Fsync all the files, because sled doesn't guarantee durability (it uses
+        // sync_file_range()) See: https://github.com/spacejam/sled/issues/1351
+        for entry in fs::read_dir(self.db_dir).unwrap() {
+            let entry = entry.unwrap();
+            if entry.path().is_file() {
+                let file = File::open(entry.path()).unwrap();
+                let _ = file.sync_all();
+            }
+        }
+        Ok(())
+    }
+}
+
+pub struct SledBenchInserter<'a> {
+    db: &'a sled::Db,
+}
+
+impl<'a> BenchInserter for SledBenchInserter<'a> {
+    fn insert(&mut self, record: BenchItem) -> Result<(), ()> {
+        self.db
+            .insert(
+                record.primary_key.as_bytes(),
+                bincode::serialize(&record).unwrap().as_bytes(),
+            )
+            .map(|_| ())
+            .map_err(|_| ())
+    }
+
+    fn remove(&mut self, key: ItemKey) -> Result<(), ()> {
+        self.db.remove(key.as_bytes()).map(|_| ()).map_err(|_| ())
+    }
+}
+
+pub struct RocksdbBenchDatabase<'a> {
+    db: &'a TransactionDB,
+}
+
+impl<'a> RocksdbBenchDatabase<'a> {
+    pub fn new(db: &'a TransactionDB) -> Self {
+        Self { db }
+    }
+}
+
+impl<'a> BenchDatabase for RocksdbBenchDatabase<'a> {
+    type W<'db>
+    = RocksdbBenchWriteTransaction<'db>
+    where
+        Self: 'db;
+    type R<'db>
+    = RocksdbBenchReadTransaction<'db>
+    where
+        Self: 'db;
+
+    fn db_type_name() -> &'static str {
+        "rocksdb"
+    }
+
+    async fn write_transaction(&self) -> Self::W<'_> {
+        RocksdbBenchWriteTransaction {
+            txn: self.db.transaction(),
+        }
+    }
+
+    async fn read_transaction(&self) -> Self::R<'_> {
+        RocksdbBenchReadTransaction {
+            snapshot: self.db.snapshot(),
+        }
+    }
+}
+
+pub struct RocksdbBenchWriteTransaction<'a> {
+    txn: rocksdb::Transaction<'a, TransactionDB>,
+}
+
+impl<'a> BenchWriteTransaction for RocksdbBenchWriteTransaction<'a> {
+    type W<'txn>
+    = RocksdbBenchInserter<'txn>
+    where
+        Self: 'txn;
+
+    fn get_inserter(&mut self) -> Self::W<'_> {
+        RocksdbBenchInserter { txn: &self.txn }
+    }
+
+    async fn commit(self) -> Result<(), ()> {
+        self.txn.commit().map_err(|_| ())
+    }
+}
+
+pub struct RocksdbBenchInserter<'a> {
+    txn: &'a rocksdb::Transaction<'a, TransactionDB>,
+}
+
+impl BenchInserter for RocksdbBenchInserter<'_> {
+    fn insert(&mut self, record: BenchItem) -> Result<(), ()> {
+        self.txn
+            .put(
+                record.primary_key.as_bytes(),
+                bincode::serialize(&record).unwrap().as_bytes(),
+            )
+            .map(|_| ())
+            .map_err(|_| ())
+    }
+
+    fn remove(&mut self, key: ItemKey) -> Result<(), ()> {
+        self.txn.delete(key.as_bytes()).map(|_| ()).map_err(|_| ())
+    }
+}
+
+pub struct RocksdbBenchReadTransaction<'db> {
+    snapshot: rocksdb::SnapshotWithThreadMode<'db, TransactionDB>,
+}
+
+impl<'db> BenchReadTransaction for RocksdbBenchReadTransaction<'db> {
+    type T<'txn>
+    = RocksdbBenchReader<'db, 'txn>
+    where
+        Self: 'txn;
+
+    fn get_reader(&self) -> Self::T<'_> {
+        RocksdbBenchReader {
+            snapshot: &self.snapshot,
+        }
+    }
+}
+
+pub struct RocksdbBenchReader<'db, 'txn> {
+    snapshot: &'txn rocksdb::SnapshotWithThreadMode<'db, TransactionDB>,
+}
+
+impl<'db, 'txn> BenchReader for RocksdbBenchReader<'db, 'txn> {
+    async fn get<'a>(&'a self, key: &'a ItemKey) -> Option<BenchItem> {
+        self.snapshot
+            .get(key.as_bytes())
+            .unwrap()
+            .map(|bytes| bincode::deserialize::<BenchItem>(&bytes).unwrap())
+    }
+
+    fn range_from<'a>(
+        &'a self,
+        range: (Bound<&'a ItemKey>, Bound<&'a ItemKey>),
+    ) -> impl Stream<Item = BenchItem> + 'a {
+        fn bound_to_include(bound: Bound<&[u8]>) -> Option<&[u8]> {
+            match bound {
+                Bound::Included(bytes) | Bound::Excluded(bytes) => Some(bytes),
+                Bound::Unbounded => None,
+            }
+        }
+
+        let (lower, upper) = range;
+        let lower = bound_to_include(lower.map(String::as_bytes))
+            .map(|bytes| IteratorMode::From(bytes, Direction::Forward))
+            .unwrap_or(IteratorMode::Start);
+        let upper = bound_to_include(upper.map(String::as_bytes));
+
+        let mut iter = self.snapshot.iterator(lower);
+
+        stream! {
+            while let Some(item) = iter.next() {
+                let (key, v) = item.unwrap();
+                if let Some(upper) = upper {
+                    if upper.cmp(&key).is_lt() {
+                        return;
+                    }
+                }
+                yield bincode::deserialize(v.as_bytes()).unwrap()
+            }
+        }
     }
 }
