@@ -106,6 +106,42 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(db: T) -> Vec<(String, Durati
     );
     results.push(("individual writes".to_string(), duration));
 
+    for num_threads in [4, 16] {
+        let mut rngs = make_rng_shards(num_threads, ELEMENTS);
+        let start = Instant::now();
+        let writes = 100;
+
+        let futures = (0..num_threads).map(|_| {
+            let db2 = db.clone();
+            let mut rng = rngs.pop().unwrap();
+
+            async move {
+                for _ in 0..writes {
+                    let mut txn = db2.write_transaction().await;
+                    let mut inserter = txn.get_inserter();
+                    inserter.insert(gen_record(&mut rng)).unwrap();
+                    drop(inserter);
+                    txn.commit().await.unwrap();
+                }
+            }
+        });
+        join_all(futures).await;
+
+        let end = Instant::now();
+        let duration = end - start;
+        println!(
+            "{}: Wrote {} individual items ({} threads) in {}ms",
+            T::db_type_name(),
+            writes,
+            num_threads,
+            duration.as_millis()
+        );
+        results.push((
+            format!("individual writes ({num_threads} threads)"),
+            duration,
+        ));
+    }
+
     let start = Instant::now();
     let batch_size = 1000;
     {
@@ -130,6 +166,42 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(db: T) -> Vec<(String, Durati
         duration.as_millis()
     );
     results.push(("batch writes".to_string(), duration));
+
+    for num_threads in [4, 16] {
+        let mut rngs = make_rng_shards(num_threads, ELEMENTS);
+        let start = Instant::now();
+        let writes = 100;
+
+        let futures = (0..num_threads).map(|_| {
+            let db2 = db.clone();
+            let mut rng = rngs.pop().unwrap();
+
+            async move {
+                for _ in 0..writes {
+                    let mut txn = db2.write_transaction().await;
+                    let mut inserter = txn.get_inserter();
+                    for _ in 0..batch_size {
+                        inserter.insert(gen_record(&mut rng)).unwrap();
+                    }
+                    drop(inserter);
+                    txn.commit().await.unwrap();
+                }
+            }
+        });
+        join_all(futures).await;
+
+        let end = Instant::now();
+        let duration = end - start;
+        println!(
+            "{}: Wrote {} x {} items ({} threads) in {}ms",
+            T::db_type_name(),
+            writes,
+            batch_size,
+            num_threads,
+            duration.as_millis()
+        );
+        results.push((format!("batch writes ({num_threads} threads)"), duration));
+    }
 
     // let txn = db.read_transaction().await;
     // {
@@ -191,6 +263,37 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(db: T) -> Vec<(String, Durati
     //             duration.as_millis()
     //         );
     //         results.push(("random range reads".to_string(), duration));
+    //     }
+    //
+    //     for _ in 0..ITERATIONS {
+    //         let mut rng = make_rng();
+    //         let start = Instant::now();
+    //         let reader = txn.get_reader();
+    //         let mut value_sum = 0;
+    //         let num_scan = 10;
+    //         for _ in 0..ELEMENTS {
+    //             let record = gen_record(&mut rng);
+    //             let mut iter = Box::pin(
+    //                 reader.projection_range_from((Bound::Included(&record.primary_key),
+    // Bound::Unbounded)),             );
+    //             for _ in 0..num_scan {
+    //                 if let Some(_projection_field) = iter.next().await {
+    //                     value_sum += 1;
+    //                 } else {
+    //                     break;
+    //                 }
+    //             }
+    //         }
+    //         assert!(value_sum > 0);
+    //         let end = Instant::now();
+    //         let duration = end - start;
+    //         println!(
+    //             "{}: Random range projection read {} elements in {}ms",
+    //             T::db_type_name(),
+    //             ELEMENTS * num_scan,
+    //             duration.as_millis()
+    //         );
+    //         results.push(("random range projection reads".to_string(), duration));
     //     }
     // }
     // drop(txn);

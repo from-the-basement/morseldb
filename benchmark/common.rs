@@ -74,6 +74,11 @@ pub trait BenchReader {
         &'a self,
         range: (Bound<&'a ItemKey>, Bound<&'a ItemKey>),
     ) -> impl Stream<Item = BenchItem> + 'a;
+
+    fn projection_range_from<'a>(
+        &'a self,
+        range: (Bound<&'a ItemKey>, Bound<&'a ItemKey>),
+    ) -> impl Stream<Item = String> + 'a;
 }
 
 pub struct TonboBenchDataBase<'a> {
@@ -153,6 +158,21 @@ impl BenchReader for TonboBenchReader<'_, '_> {
                         u32: item_ref.u32.unwrap(),
                         boolean: item_ref.boolean.unwrap(),
                     };
+                }
+            }
+        }
+    }
+
+    fn projection_range_from<'a>(
+        &'a self,
+        range: (Bound<&'a ItemKey>, Bound<&'a ItemKey>),
+    ) -> impl Stream<Item = ProjectionField> + 'a {
+        stream! {
+            let mut stream = self.txn.scan(range).await.projection(vec![1]).take().await.unwrap();
+
+            while let Some(result) = stream.next().await {
+                if let Some(item_ref) = result.unwrap().value() {
+                    yield item_ref.string.unwrap().to_string();
                 }
             }
         }
@@ -261,6 +281,24 @@ impl BenchReader for RedbBenchReader {
             while let Some(item) = iter.next() {
                 let (_, v) = item.unwrap();
                 yield bincode::deserialize(v.value()).unwrap()
+            }
+        }
+    }
+
+    fn projection_range_from<'a>(
+        &'a self,
+        range: (Bound<&'a ItemKey>, Bound<&'a ItemKey>),
+    ) -> impl Stream<Item = ProjectionField> + 'a {
+        let (lower, upper) = range;
+        let mut iter = self
+            .table
+            .range::<&[u8]>((lower.map(ItemKey::as_bytes), upper.map(ItemKey::as_bytes)))
+            .unwrap();
+
+        stream! {
+            while let Some(item) = iter.next() {
+                let (_, v) = item.unwrap();
+                yield bincode::deserialize::<BenchItem>(v.value()).unwrap().string
             }
         }
     }
@@ -384,6 +422,24 @@ impl<'db> BenchReader for SledBenchReader<'db> {
             while let Some(item) = iter.next() {
                 let (_, v) = item.unwrap();
                 yield bincode::deserialize(v.as_bytes()).unwrap()
+            }
+        }
+    }
+
+    fn projection_range_from<'a>(
+        &'a self,
+        range: (Bound<&'a ItemKey>, Bound<&'a ItemKey>),
+    ) -> impl Stream<Item = ProjectionField> + 'a {
+        let (lower, upper) = range;
+        let mut iter = self.db.range::<&[u8], (Bound<&[u8]>, Bound<&[u8]>)>((
+            lower.map(ItemKey::as_bytes),
+            upper.map(ItemKey::as_bytes),
+        ));
+
+        stream! {
+            while let Some(item) = iter.next() {
+                let (_, v) = item.unwrap();
+                yield bincode::deserialize::<BenchItem>(v.as_bytes()).unwrap().string
             }
         }
     }
@@ -573,6 +629,38 @@ impl<'db, 'txn> BenchReader for RocksdbBenchReader<'db, 'txn> {
                     }
                 }
                 yield bincode::deserialize(v.as_bytes()).unwrap()
+            }
+        }
+    }
+
+    fn projection_range_from<'a>(
+        &'a self,
+        range: (Bound<&'a ItemKey>, Bound<&'a ItemKey>),
+    ) -> impl Stream<Item = ProjectionField> + 'a {
+        fn bound_to_include(bound: Bound<&[u8]>) -> Option<&[u8]> {
+            match bound {
+                Bound::Included(bytes) | Bound::Excluded(bytes) => Some(bytes),
+                Bound::Unbounded => None,
+            }
+        }
+
+        let (lower, upper) = range;
+        let lower = bound_to_include(lower.map(String::as_bytes))
+            .map(|bytes| IteratorMode::From(bytes, Direction::Forward))
+            .unwrap_or(IteratorMode::Start);
+        let upper = bound_to_include(upper.map(String::as_bytes));
+
+        let mut iter = self.snapshot.iterator(lower);
+
+        stream! {
+            while let Some(item) = iter.next() {
+                let (key, v) = item.unwrap();
+                if let Some(upper) = upper {
+                    if upper.cmp(&key).is_lt() {
+                        return;
+                    }
+                }
+                yield bincode::deserialize::<BenchItem>(v.as_bytes()).unwrap().string
             }
         }
     }
