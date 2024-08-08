@@ -9,6 +9,7 @@ use arrow::{
 };
 use once_cell::sync::Lazy;
 use parquet::arrow::ProjectionMask;
+use parquet::format::SortingColumn;
 use parquet::schema::types::ColumnPath;
 use super::{internal::InternalRecordRef, Key, Record, RecordRef};
 use crate::{
@@ -35,8 +36,11 @@ impl Record for String {
         2
     }
 
-    fn primary_key_path() -> ColumnPath {
-        ColumnPath::new(vec!["_ts".to_string(), PRIMARY_FIELD_NAME.to_string()])
+    fn primary_key_path() -> (ColumnPath, Vec<SortingColumn>) {
+        (
+            ColumnPath::new(vec!["_ts".to_string(), PRIMARY_FIELD_NAME.to_string()]),
+            vec![SortingColumn::new(1, true, true), SortingColumn::new(2, false, true)]
+        )
     }
 
     fn as_record_ref(&self) -> Self::Ref<'_> {

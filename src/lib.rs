@@ -667,6 +667,7 @@ pub(crate) mod tests {
     use tokio::io;
     use once_cell::sync::Lazy;
     use parquet::arrow::ProjectionMask;
+    use parquet::format::SortingColumn;
     use parquet::schema::types::ColumnPath;
     use tempfile::TempDir;
     use tracing::error;
@@ -744,8 +745,11 @@ pub(crate) mod tests {
             2
         }
 
-        fn primary_key_path() -> ColumnPath {
-            ColumnPath::new(vec!["_ts".to_string(), "vstring".to_string()])
+        fn primary_key_path() -> (ColumnPath, Vec<SortingColumn>) {
+            (
+                ColumnPath::new(vec!["_ts".to_string(), "vstring".to_string()]),
+                vec![SortingColumn::new(1, true, true), SortingColumn::new(2, false, true)]
+            )
         }
 
         fn as_record_ref(&self) -> Self::Ref<'_> {

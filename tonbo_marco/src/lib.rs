@@ -428,8 +428,11 @@ pub fn tonbo_record(args: TokenStream, input: TokenStream) -> TokenStream {
                 #primary_key_index
             }
 
-            fn primary_key_path() -> ::parquet::schema::types::ColumnPath {
-                ::parquet::schema::types::ColumnPath::new(vec!["_ts".to_string(), stringify!(#primary_key_name).to_string()])
+            fn primary_key_path() -> (::parquet::schema::types::ColumnPath, Vec<::parquet::format::SortingColumn>) {
+                (
+                    ::parquet::schema::types::ColumnPath::new(vec!["_ts".to_string(), stringify!(#primary_key_name).to_string()]),
+                    vec![::parquet::format::SortingColumn::new(1_i32, true, true), ::parquet::format::SortingColumn::new(#primary_key_index as i32, false, true)]
+                )
             }
 
             fn as_record_ref(&self) -> Self::Ref<'_> {

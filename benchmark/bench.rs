@@ -14,7 +14,8 @@ use tempfile::{NamedTempFile, TempDir};
 use tonbo::{executor::tokio::TokioExecutor, DbOption, DB};
 
 const ITERATIONS: usize = 2;
-const ELEMENTS: usize = 10_000;
+const WRITE_TIMES: usize = 10_000;
+const READ_TIMES: usize = 200;
 const KEY_SIZE: usize = 24;
 const STRING_SIZE: usize = 2 * 1024;
 const RNG_SEED: u64 = 3;
@@ -75,7 +76,7 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
     let mut txn = db.write_transaction().await;
     let mut inserter = txn.get_inserter();
     {
-        for _ in 0..ELEMENTS {
+        for _ in 0..WRITE_TIMES {
             inserter.insert(gen_record(&mut rng)).unwrap();
         }
     }
@@ -87,7 +88,7 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
     println!(
         "{}: Bulk loaded {} items in {}ms",
         T::db_type_name(),
-        ELEMENTS,
+        WRITE_TIMES,
         duration.as_millis()
     );
     results.push(("bulk load".to_string(), duration));
@@ -229,8 +230,7 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
             let mut rng = make_rng();
             let start = Instant::now();
             let reader = txn.get_reader();
-            for i in 0..ELEMENTS {
-                println!("{i}");
+            for _ in 0..READ_TIMES {
                 let record = gen_record(&mut rng);
                 let _ = reader.get(&record.primary_key).await;
             }
@@ -239,7 +239,7 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
             println!(
                 "{}: Random read {} items in {}ms",
                 T::db_type_name(),
-                ELEMENTS,
+                READ_TIMES,
                 duration.as_millis()
             );
             results.push(("random reads".to_string(), duration));
@@ -251,7 +251,7 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
             let reader = txn.get_reader();
             let mut value_sum = 0;
             let num_scan = 10;
-            for _ in 0..ELEMENTS {
+            for _ in 0..READ_TIMES {
                 let record = gen_record(&mut rng);
                 let mut iter = Box::pin(
                     reader.range_from((Bound::Included(&record.primary_key), Bound::Unbounded)),
@@ -270,7 +270,7 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
             println!(
                 "{}: Random range read {} elements in {}ms",
                 T::db_type_name(),
-                ELEMENTS * num_scan,
+                READ_TIMES * num_scan,
                 duration.as_millis()
             );
             results.push(("random range reads".to_string(), duration));
@@ -282,7 +282,7 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
             let reader = txn.get_reader();
             let mut value_sum = 0;
             let num_scan = 10;
-            for _ in 0..ELEMENTS {
+            for _ in 0..READ_TIMES {
                 let record = gen_record(&mut rng);
                 let mut iter = Box::pin(
                     reader.projection_range_from((Bound::Included(&record.primary_key),
@@ -301,7 +301,7 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
             println!(
                 "{}: Random range projection read {} elements in {}ms",
                 T::db_type_name(),
-                ELEMENTS * num_scan,
+                READ_TIMES * num_scan,
                 duration.as_millis()
             );
             results.push(("random range projection reads".to_string(), duration));
@@ -341,7 +341,7 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
     // }
 
     let start = Instant::now();
-    let deletes = ELEMENTS / 2;
+    let deletes = WRITE_TIMES / 2;
     {
         let mut rng = make_rng();
         let mut txn = db.write_transaction().await;
@@ -410,7 +410,7 @@ async fn main() {
 
     let mut table = comfy_table::Table::new();
     table.set_width(100);
-    table.set_header(["", "redb", "rocksdb", "sled"]);
+    table.set_header(["", "tonbo", "redb", "rocksdb", "sled"]);
     for row in rows {
         table.add_row(row);
     }

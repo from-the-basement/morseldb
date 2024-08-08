@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 use parquet::basic::Compression;
 use parquet::file::properties::{EnabledStatistics, WriterProperties};
-
+use parquet::format::SortingColumn;
 use crate::{
     fs::{FileId, FileProvider, FileType},
     record::Record,
@@ -33,6 +33,8 @@ where
 {
     /// build the default configured [`DbOption`](struct.DbOption.html) based on the passed path
     fn from(path: P) -> Self {
+        let (column_paths, sorting_columns) = R::primary_key_path();
+
         DbOption {
             path: path.into(),
             max_mutable_len: 3000,
@@ -44,8 +46,10 @@ where
             write_parquet_properties: WriterProperties::builder()
                 .set_compression(Compression::SNAPPY)
                 .set_dictionary_enabled(true)
-                .set_column_statistics_enabled(R::primary_key_path(), EnabledStatistics::Page)
-                .set_column_bloom_filter_enabled(R::primary_key_path(), true)
+                .set_column_statistics_enabled(column_paths.clone(), EnabledStatistics::Page)
+                .set_column_bloom_filter_enabled(column_paths, true)
+                .set_max_row_group_size(256)
+                .set_sorting_columns(Some(sorting_columns))
                 .build(),
 
             use_wal: true,
