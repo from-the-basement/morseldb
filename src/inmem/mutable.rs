@@ -91,16 +91,16 @@ where
         let timestamped_key = Timestamped::new(key, ts);
 
         if let Some(log_ty) = log_ty {
-            let mut wal_guard = self.wal.lock().await;
-
-            wal_guard
-                .write(
-                    log_ty,
-                    timestamped_key.map(|key| unsafe { transmute(key.as_key_ref()) }),
-                    value.as_ref().map(R::as_record_ref),
-                )
-                .await
-                .unwrap();
+            // let mut wal_guard = self.wal.lock().await;
+            //
+            // wal_guard
+            //     .write(
+            //         log_ty,
+            //         timestamped_key.map(|key| unsafe { transmute(key.as_key_ref()) }),
+            //         value.as_ref().map(R::as_record_ref),
+            //     )
+            //     .await
+            //     .unwrap();
             // .map_err(WriteError::Encode)?;
         }
         self.data.insert(timestamped_key, value);

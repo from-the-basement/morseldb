@@ -7,16 +7,16 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-
+use std::path::Path;
 use common::*;
 use futures_util::{future::join_all, StreamExt};
 use tempfile::{NamedTempFile, TempDir};
 use tonbo::{executor::tokio::TokioExecutor, DbOption, DB};
 
 const ITERATIONS: usize = 2;
-const ELEMENTS: usize = 1_000_000;
+const ELEMENTS: usize = 10_000;
 const KEY_SIZE: usize = 24;
-const STRING_SIZE: usize = 150;
+const STRING_SIZE: usize = 2 * 1024;
 const RNG_SEED: u64 = 3;
 
 fn make_rng() -> fastrand::Rng {
@@ -38,7 +38,15 @@ fn gen_string(rng: &mut fastrand::Rng, len: usize) -> String {
 fn gen_record(rng: &mut fastrand::Rng) -> BenchItem {
     BenchItem {
         primary_key: gen_string(rng, KEY_SIZE),
-        string: gen_string(rng, STRING_SIZE),
+        string_1: gen_string(rng, STRING_SIZE),
+        string_2: gen_string(rng, STRING_SIZE),
+        string_3: gen_string(rng, STRING_SIZE),
+        string_4: gen_string(rng, STRING_SIZE),
+        string_5: gen_string(rng, STRING_SIZE),
+        string_6: gen_string(rng, STRING_SIZE),
+        string_7: gen_string(rng, STRING_SIZE),
+        string_8: gen_string(rng, STRING_SIZE),
+        string_9: gen_string(rng, STRING_SIZE),
         u32: rng.u32(..),
         boolean: rng.bool(),
     }
@@ -58,10 +66,10 @@ fn make_rng_shards(shards: usize, elements: usize) -> Vec<fastrand::Rng> {
     rngs
 }
 
-async fn benchmark<T: BenchDatabase + Send + Sync>(db: T) -> Vec<(String, Duration)> {
+async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clone) -> Vec<(String, Duration)> {
     let mut rng = make_rng();
     let mut results = Vec::new();
-    let db = Arc::new(db);
+    let db = Arc::new(T::build(path.clone()).await);
 
     let start = Instant::now();
     let mut txn = db.write_transaction().await;
@@ -106,41 +114,41 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(db: T) -> Vec<(String, Durati
     );
     results.push(("individual writes".to_string(), duration));
 
-    for num_threads in [4, 16] {
-        let mut rngs = make_rng_shards(num_threads, ELEMENTS);
-        let start = Instant::now();
-        let writes = 100;
-
-        let futures = (0..num_threads).map(|_| {
-            let db2 = db.clone();
-            let mut rng = rngs.pop().unwrap();
-
-            async move {
-                for _ in 0..writes {
-                    let mut txn = db2.write_transaction().await;
-                    let mut inserter = txn.get_inserter();
-                    inserter.insert(gen_record(&mut rng)).unwrap();
-                    drop(inserter);
-                    txn.commit().await.unwrap();
-                }
-            }
-        });
-        join_all(futures).await;
-
-        let end = Instant::now();
-        let duration = end - start;
-        println!(
-            "{}: Wrote {} individual items ({} threads) in {}ms",
-            T::db_type_name(),
-            writes,
-            num_threads,
-            duration.as_millis()
-        );
-        results.push((
-            format!("individual writes ({num_threads} threads)"),
-            duration,
-        ));
-    }
+    // for num_threads in [4, 16] {
+    //     let mut rngs = make_rng_shards(num_threads, ELEMENTS);
+    //     let start = Instant::now();
+    //     let writes = 100;
+    //
+    //     let futures = (0..num_threads).map(|_| {
+    //         let db2 = db.clone();
+    //         let mut rng = rngs.pop().unwrap();
+    //
+    //         async move {
+    //             for _ in 0..writes {
+    //                 let mut txn = db2.write_transaction().await;
+    //                 let mut inserter = txn.get_inserter();
+    //                 inserter.insert(gen_record(&mut rng)).unwrap();
+    //                 drop(inserter);
+    //                 txn.commit().await.unwrap();
+    //             }
+    //         }
+    //     });
+    //     join_all(futures).await;
+    //
+    //     let end = Instant::now();
+    //     let duration = end - start;
+    //     println!(
+    //         "{}: Wrote {} individual items ({} threads) in {}ms",
+    //         T::db_type_name(),
+    //         writes,
+    //         num_threads,
+    //         duration.as_millis()
+    //     );
+    //     results.push((
+    //         format!("individual writes ({num_threads} threads)"),
+    //         duration,
+    //     ));
+    // }
 
     let start = Instant::now();
     let batch_size = 1000;
@@ -167,137 +175,140 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(db: T) -> Vec<(String, Durati
     );
     results.push(("batch writes".to_string(), duration));
 
-    for num_threads in [4, 16] {
-        let mut rngs = make_rng_shards(num_threads, ELEMENTS);
-        let start = Instant::now();
-        let writes = 100;
+    // for num_threads in [4, 16] {
+    //     let mut rngs = make_rng_shards(num_threads, ELEMENTS);
+    //     let start = Instant::now();
+    //     let writes = 100;
+    //
+    //     let futures = (0..num_threads).map(|_| {
+    //         let db2 = db.clone();
+    //         let mut rng = rngs.pop().unwrap();
+    //
+    //         async move {
+    //             for _ in 0..writes {
+    //                 let mut txn = db2.write_transaction().await;
+    //                 let mut inserter = txn.get_inserter();
+    //                 for _ in 0..batch_size {
+    //                     inserter.insert(gen_record(&mut rng)).unwrap();
+    //                 }
+    //                 drop(inserter);
+    //                 txn.commit().await.unwrap();
+    //             }
+    //         }
+    //     });
+    //     join_all(futures).await;
+    //
+    //     let end = Instant::now();
+    //     let duration = end - start;
+    //     println!(
+    //         "{}: Wrote {} x {} items ({} threads) in {}ms",
+    //         T::db_type_name(),
+    //         writes,
+    //         batch_size,
+    //         num_threads,
+    //         duration.as_millis()
+    //     );
+    //     results.push((format!("batch writes ({num_threads} threads)"), duration));
+    // }
 
-        let futures = (0..num_threads).map(|_| {
-            let db2 = db.clone();
-            let mut rng = rngs.pop().unwrap();
+    drop(db);
+    let db = Arc::new(T::build(path).await);
+    let txn = db.read_transaction().await;
+    {
+        // {
+        //     let start = Instant::now();
+        //     let len = txn.get_reader().len();
+        //     assert_eq!(len, ELEMENTS as u64 + 100_000 + 100);
+        //     let end = Instant::now();
+        //     let duration = end - start;
+        //     println!("{}: len() in {}ms", T::db_type_name(), duration.as_millis());
+        //     results.push(("len()".to_string(), duration));
+        // }
 
-            async move {
-                for _ in 0..writes {
-                    let mut txn = db2.write_transaction().await;
-                    let mut inserter = txn.get_inserter();
-                    for _ in 0..batch_size {
-                        inserter.insert(gen_record(&mut rng)).unwrap();
+        for _ in 0..ITERATIONS {
+            let mut rng = make_rng();
+            let start = Instant::now();
+            let reader = txn.get_reader();
+            for i in 0..ELEMENTS {
+                println!("{i}");
+                let record = gen_record(&mut rng);
+                let _ = reader.get(&record.primary_key).await;
+            }
+            let end = Instant::now();
+            let duration = end - start;
+            println!(
+                "{}: Random read {} items in {}ms",
+                T::db_type_name(),
+                ELEMENTS,
+                duration.as_millis()
+            );
+            results.push(("random reads".to_string(), duration));
+        }
+
+        for _ in 0..ITERATIONS {
+            let mut rng = make_rng();
+            let start = Instant::now();
+            let reader = txn.get_reader();
+            let mut value_sum = 0;
+            let num_scan = 10;
+            for _ in 0..ELEMENTS {
+                let record = gen_record(&mut rng);
+                let mut iter = Box::pin(
+                    reader.range_from((Bound::Included(&record.primary_key), Bound::Unbounded)),
+                );
+                for _ in 0..num_scan {
+                    if let Some(record) = iter.next().await {
+                        value_sum += record.u32;
+                    } else {
+                        break;
                     }
-                    drop(inserter);
-                    txn.commit().await.unwrap();
                 }
             }
-        });
-        join_all(futures).await;
+            assert!(value_sum > 0);
+            let end = Instant::now();
+            let duration = end - start;
+            println!(
+                "{}: Random range read {} elements in {}ms",
+                T::db_type_name(),
+                ELEMENTS * num_scan,
+                duration.as_millis()
+            );
+            results.push(("random range reads".to_string(), duration));
+        }
 
-        let end = Instant::now();
-        let duration = end - start;
-        println!(
-            "{}: Wrote {} x {} items ({} threads) in {}ms",
-            T::db_type_name(),
-            writes,
-            batch_size,
-            num_threads,
-            duration.as_millis()
-        );
-        results.push((format!("batch writes ({num_threads} threads)"), duration));
+        for _ in 0..ITERATIONS {
+            let mut rng = make_rng();
+            let start = Instant::now();
+            let reader = txn.get_reader();
+            let mut value_sum = 0;
+            let num_scan = 10;
+            for _ in 0..ELEMENTS {
+                let record = gen_record(&mut rng);
+                let mut iter = Box::pin(
+                    reader.projection_range_from((Bound::Included(&record.primary_key),
+    Bound::Unbounded)),             );
+                for _ in 0..num_scan {
+                    if let Some(_projection_field) = iter.next().await {
+                        value_sum += 1;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            assert!(value_sum > 0);
+            let end = Instant::now();
+            let duration = end - start;
+            println!(
+                "{}: Random range projection read {} elements in {}ms",
+                T::db_type_name(),
+                ELEMENTS * num_scan,
+                duration.as_millis()
+            );
+            results.push(("random range projection reads".to_string(), duration));
+        }
     }
+    drop(txn);
 
-    // let txn = db.read_transaction().await;
-    // {
-    //     // {
-    //     //     let start = Instant::now();
-    //     //     let len = txn.get_reader().len();
-    //     //     assert_eq!(len, ELEMENTS as u64 + 100_000 + 100);
-    //     //     let end = Instant::now();
-    //     //     let duration = end - start;
-    //     //     println!("{}: len() in {}ms", T::db_type_name(), duration.as_millis());
-    //     //     results.push(("len()".to_string(), duration));
-    //     // }
-    //
-    //     for _ in 0..ITERATIONS {
-    //         let mut rng = make_rng();
-    //         let start = Instant::now();
-    //         let reader = txn.get_reader();
-    //         for _ in 0..ELEMENTS {
-    //             let record = gen_record(&mut rng);
-    //             let _ = reader.get(&record.primary_key).await;
-    //         }
-    //         let end = Instant::now();
-    //         let duration = end - start;
-    //         println!(
-    //             "{}: Random read {} items in {}ms",
-    //             T::db_type_name(),
-    //             ELEMENTS,
-    //             duration.as_millis()
-    //         );
-    //         results.push(("random reads".to_string(), duration));
-    //     }
-    //
-    //     for _ in 0..ITERATIONS {
-    //         let mut rng = make_rng();
-    //         let start = Instant::now();
-    //         let reader = txn.get_reader();
-    //         let mut value_sum = 0;
-    //         let num_scan = 10;
-    //         for _ in 0..ELEMENTS {
-    //             let record = gen_record(&mut rng);
-    //             let mut iter = Box::pin(
-    //                 reader.range_from((Bound::Included(&record.primary_key), Bound::Unbounded)),
-    //             );
-    //             for _ in 0..num_scan {
-    //                 if let Some(record) = iter.next().await {
-    //                     value_sum += record.u32;
-    //                 } else {
-    //                     break;
-    //                 }
-    //             }
-    //         }
-    //         assert!(value_sum > 0);
-    //         let end = Instant::now();
-    //         let duration = end - start;
-    //         println!(
-    //             "{}: Random range read {} elements in {}ms",
-    //             T::db_type_name(),
-    //             ELEMENTS * num_scan,
-    //             duration.as_millis()
-    //         );
-    //         results.push(("random range reads".to_string(), duration));
-    //     }
-    //
-    //     for _ in 0..ITERATIONS {
-    //         let mut rng = make_rng();
-    //         let start = Instant::now();
-    //         let reader = txn.get_reader();
-    //         let mut value_sum = 0;
-    //         let num_scan = 10;
-    //         for _ in 0..ELEMENTS {
-    //             let record = gen_record(&mut rng);
-    //             let mut iter = Box::pin(
-    //                 reader.projection_range_from((Bound::Included(&record.primary_key),
-    // Bound::Unbounded)),             );
-    //             for _ in 0..num_scan {
-    //                 if let Some(_projection_field) = iter.next().await {
-    //                     value_sum += 1;
-    //                 } else {
-    //                     break;
-    //                 }
-    //             }
-    //         }
-    //         assert!(value_sum > 0);
-    //         let end = Instant::now();
-    //         let duration = end - start;
-    //         println!(
-    //             "{}: Random range projection read {} elements in {}ms",
-    //             T::db_type_name(),
-    //             ELEMENTS * num_scan,
-    //             duration.as_millis()
-    //         );
-    //         results.push(("random range projection reads".to_string(), duration));
-    //     }
-    // }
-    // drop(txn);
-    //
     // for num_threads in [4, 8, 16, 32] {
     //     let mut rngs = make_rng_shards(num_threads, ELEMENTS);
     //     let start = Instant::now();
@@ -362,41 +373,20 @@ async fn main() {
     fs::create_dir(&tmpdir).unwrap();
 
     let tonbo_latency_results = {
-        let tmpfile: TempDir = tempfile::tempdir_in(&tmpdir).unwrap();
-        let db = DB::new(DbOption::from(tmpfile.path()), TokioExecutor::new())
-            .await
-            .unwrap();
-        let table = TonboBenchDataBase::new(&db);
-        benchmark(table).await
+        let tmp_dir: TempDir = tempfile::tempdir_in(&tmpdir).unwrap();
+        benchmark::<TonboBenchDataBase>(tmp_dir.path()).await
     };
     let redb_latency_results = {
-        let tmpfile: NamedTempFile = NamedTempFile::new_in(&tmpdir).unwrap();
-        let db = redb::Database::builder()
-            .set_cache_size(4 * 1024 * 1024 * 1024)
-            .create(tmpfile.path())
-            .unwrap();
-        let table = RedbBenchDatabase::new(&db);
-        benchmark(table).await
+        let tmp_file: NamedTempFile = NamedTempFile::new_in(&tmpdir).unwrap();
+        benchmark::<RedbBenchDatabase>(tmp_file.path()).await
     };
     let rocksdb_results = {
-        let tmpfile: TempDir = tempfile::tempdir_in(&tmpdir).unwrap();
-
-        let mut bb = rocksdb::BlockBasedOptions::default();
-        bb.set_block_cache(&rocksdb::Cache::new_lru_cache(4 * 1_024 * 1_024 * 1_024));
-
-        let mut opts = rocksdb::Options::default();
-        opts.set_block_based_table_factory(&bb);
-        opts.create_if_missing(true);
-
-        let db = rocksdb::TransactionDB::open(&opts, &Default::default(), tmpfile.path()).unwrap();
-        let table = RocksdbBenchDatabase::new(&db);
-        benchmark(table).await
+        let tmp_file: TempDir = tempfile::tempdir_in(&tmpdir).unwrap();
+        benchmark::<RocksdbBenchDatabase>(tmp_file.path()).await
     };
     let sled_results = {
-        let tmpfile: TempDir = tempfile::tempdir_in(&tmpdir).unwrap();
-        let db = sled::Config::new().path(tmpfile.path()).open().unwrap();
-        let table = SledBenchDatabase::new(&db, tmpfile.path());
-        benchmark(table).await
+        let tmp_file: TempDir = tempfile::tempdir_in(&tmpdir).unwrap();
+        benchmark::<SledBenchDatabase>(tmp_file.path()).await
     };
 
     fs::remove_dir_all(&tmpdir).unwrap();
@@ -420,7 +410,7 @@ async fn main() {
 
     let mut table = comfy_table::Table::new();
     table.set_width(100);
-    table.set_header(["", "tonbo", "redb", "rocksdb", "sled"]);
+    table.set_header(["", "redb", "rocksdb", "sled"]);
     for row in rows {
         table.add_row(row);
     }

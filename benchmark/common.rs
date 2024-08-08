@@ -1,12 +1,13 @@
-use std::{collections::Bound, fs, fs::File, path::Path};
-
+use std::{collections::Bound, fs, fs::File, path, path::Path};
+use std::path::PathBuf;
 use async_stream::stream;
 use futures_core::Stream;
 use futures_util::StreamExt;
 use parquet::data_type::AsBytes;
 use redb::TableDefinition;
 use rocksdb::{Direction, IteratorMode, TransactionDB};
-use tonbo::{executor::tokio::TokioExecutor, record::KeyRef, Projection};
+use tempfile::TempDir;
+use tonbo::{executor::tokio::TokioExecutor, record::KeyRef, Projection, DbOption};
 use tonbo_marco::tonbo_record;
 
 #[allow(dead_code)]
@@ -19,7 +20,15 @@ type ProjectionField = String;
 pub struct BenchItem {
     #[primary_key]
     pub primary_key: String,
-    pub string: String,
+    pub string_1: String,
+    pub string_2: String,
+    pub string_3: String,
+    pub string_4: String,
+    pub string_5: String,
+    pub string_6: String,
+    pub string_7: String,
+    pub string_8: String,
+    pub string_9: String,
     pub u32: u32,
     pub boolean: bool,
 }
@@ -37,6 +46,8 @@ pub trait BenchDatabase {
     async fn write_transaction(&self) -> Self::W<'_>;
 
     async fn read_transaction(&self) -> Self::R<'_>;
+
+    async fn build(path: impl AsRef<Path>) -> Self;
 }
 
 pub trait BenchWriteTransaction {
@@ -81,18 +92,18 @@ pub trait BenchReader {
     ) -> impl Stream<Item = String> + 'a;
 }
 
-pub struct TonboBenchDataBase<'a> {
-    db: &'a tonbo::DB<BenchItem, TokioExecutor>,
+pub struct TonboBenchDataBase {
+    db: tonbo::DB<BenchItem, TokioExecutor>,
 }
 
-impl<'a> TonboBenchDataBase<'a> {
+impl TonboBenchDataBase {
     #[allow(dead_code)]
-    pub fn new(db: &'a tonbo::DB<BenchItem, TokioExecutor>) -> Self {
+    pub fn new(db: tonbo::DB<BenchItem, TokioExecutor>) -> Self {
         TonboBenchDataBase { db }
     }
 }
 
-impl<'a> BenchDatabase for TonboBenchDataBase<'a> {
+impl BenchDatabase for TonboBenchDataBase {
     type W<'db> = TonboBenchWriteTransaction<'db> where Self: 'db;
     type R<'db> = TonboBenchReadTransaction<'db> where Self: 'db;
 
@@ -110,6 +121,13 @@ impl<'a> BenchDatabase for TonboBenchDataBase<'a> {
         TonboBenchReadTransaction {
             txn: self.db.transaction().await,
         }
+    }
+
+    async fn build(path: impl AsRef<Path>) -> Self {
+        let db = tonbo::DB::new(DbOption::from(path.as_ref().to_path_buf()), TokioExecutor::new())
+            .await
+            .unwrap();
+        TonboBenchDataBase::new(db)
     }
 }
 
@@ -137,7 +155,15 @@ impl BenchReader for TonboBenchReader<'_, '_> {
             .unwrap()
             .map(|entry| BenchItem {
                 primary_key: entry.get().primary_key.to_key(),
-                string: entry.get().string.unwrap().to_string(),
+                string_1: entry.get().string_1.unwrap().to_string(),
+                string_2: entry.get().string_2.unwrap().to_string(),
+                string_3: entry.get().string_3.unwrap().to_string(),
+                string_4: entry.get().string_4.unwrap().to_string(),
+                string_5: entry.get().string_5.unwrap().to_string(),
+                string_6: entry.get().string_6.unwrap().to_string(),
+                string_7: entry.get().string_7.unwrap().to_string(),
+                string_8: entry.get().string_8.unwrap().to_string(),
+                string_9: entry.get().string_9.unwrap().to_string(),
                 u32: entry.get().u32.unwrap(),
                 boolean: entry.get().boolean.unwrap(),
             })
@@ -154,7 +180,15 @@ impl BenchReader for TonboBenchReader<'_, '_> {
                 if let Some(item_ref) = result.unwrap().value() {
                     yield BenchItem {
                         primary_key: item_ref.primary_key.to_key(),
-                        string: item_ref.string.unwrap().to_string(),
+                        string_1: item_ref.string_1.unwrap().to_string(),
+                        string_2: item_ref.string_2.unwrap().to_string(),
+                        string_3: item_ref.string_3.unwrap().to_string(),
+                        string_4: item_ref.string_4.unwrap().to_string(),
+                        string_5: item_ref.string_5.unwrap().to_string(),
+                        string_6: item_ref.string_6.unwrap().to_string(),
+                        string_7: item_ref.string_7.unwrap().to_string(),
+                        string_8: item_ref.string_8.unwrap().to_string(),
+                        string_9: item_ref.string_9.unwrap().to_string(),
                         u32: item_ref.u32.unwrap(),
                         boolean: item_ref.boolean.unwrap(),
                     };
@@ -172,7 +206,7 @@ impl BenchReader for TonboBenchReader<'_, '_> {
 
             while let Some(result) = stream.next().await {
                 if let Some(item_ref) = result.unwrap().value() {
-                    yield item_ref.string.unwrap().to_string();
+                    yield item_ref.string_1.unwrap().to_string();
                 }
             }
         }
@@ -212,18 +246,18 @@ impl BenchInserter for TonboBenchInserter<'_, '_> {
     }
 }
 
-pub struct RedbBenchDatabase<'a> {
-    db: &'a redb::Database,
+pub struct RedbBenchDatabase {
+    db: redb::Database,
 }
 
-impl<'a> RedbBenchDatabase<'a> {
+impl RedbBenchDatabase {
     #[allow(dead_code)]
-    pub fn new(db: &'a redb::Database) -> Self {
+    pub fn new(db: redb::Database) -> Self {
         RedbBenchDatabase { db }
     }
 }
 
-impl<'a> BenchDatabase for RedbBenchDatabase<'a> {
+impl BenchDatabase for RedbBenchDatabase {
     type W<'db> = RedbBenchWriteTransaction where Self: 'db;
     type R<'db> = RedbBenchReadTransaction where Self: 'db;
 
@@ -239,6 +273,14 @@ impl<'a> BenchDatabase for RedbBenchDatabase<'a> {
     async fn read_transaction(&self) -> Self::R<'_> {
         let txn = self.db.begin_read().unwrap();
         RedbBenchReadTransaction { txn }
+    }
+
+    async fn build(path: impl AsRef<Path>) -> Self {
+        let db = redb::Database::builder()
+            .set_cache_size(4 * 1024 * 1024 * 1024)
+            .create(path)
+            .unwrap();
+        RedbBenchDatabase::new(db)
     }
 }
 
@@ -298,7 +340,7 @@ impl BenchReader for RedbBenchReader {
         stream! {
             while let Some(item) = iter.next() {
                 let (_, v) = item.unwrap();
-                yield bincode::deserialize::<BenchItem>(v.value()).unwrap().string
+                yield bincode::deserialize::<BenchItem>(v.value()).unwrap().string_1
             }
         }
     }
@@ -344,18 +386,18 @@ impl BenchInserter for RedbBenchInserter<'_> {
     }
 }
 
-pub struct SledBenchDatabase<'a> {
-    db: &'a sled::Db,
-    db_dir: &'a Path,
+pub struct SledBenchDatabase {
+    db: sled::Db,
+    db_dir: PathBuf,
 }
 
-impl<'a> SledBenchDatabase<'a> {
-    pub fn new(db: &'a sled::Db, path: &'a Path) -> Self {
+impl SledBenchDatabase {
+    pub fn new(db: sled::Db, path: PathBuf) -> Self {
         SledBenchDatabase { db, db_dir: path }
     }
 }
 
-impl<'a> BenchDatabase for SledBenchDatabase<'a> {
+impl BenchDatabase for SledBenchDatabase {
     type W<'db>
     = SledBenchWriteTransaction<'db>
     where
@@ -378,6 +420,12 @@ impl<'a> BenchDatabase for SledBenchDatabase<'a> {
 
     async fn read_transaction(&self) -> Self::R<'_> {
         SledBenchReadTransaction { db: &self.db }
+    }
+
+    async fn build(path: impl AsRef<Path>) -> Self {
+        let path_buf = path.as_ref().to_path_buf();
+        let db = sled::Config::new().path(path).open().unwrap();
+        SledBenchDatabase::new(db, path_buf)
     }
 }
 
@@ -439,7 +487,7 @@ impl<'db> BenchReader for SledBenchReader<'db> {
         stream! {
             while let Some(item) = iter.next() {
                 let (_, v) = item.unwrap();
-                yield bincode::deserialize::<BenchItem>(v.as_bytes()).unwrap().string
+                yield bincode::deserialize::<BenchItem>(v.as_bytes()).unwrap().string_1
             }
         }
     }
@@ -496,17 +544,17 @@ impl<'a> BenchInserter for SledBenchInserter<'a> {
     }
 }
 
-pub struct RocksdbBenchDatabase<'a> {
-    db: &'a TransactionDB,
+pub struct RocksdbBenchDatabase {
+    db: TransactionDB,
 }
 
-impl<'a> RocksdbBenchDatabase<'a> {
-    pub fn new(db: &'a TransactionDB) -> Self {
+impl RocksdbBenchDatabase {
+    pub fn new(db: TransactionDB) -> Self {
         Self { db }
     }
 }
 
-impl<'a> BenchDatabase for RocksdbBenchDatabase<'a> {
+impl BenchDatabase for RocksdbBenchDatabase {
     type W<'db>
     = RocksdbBenchWriteTransaction<'db>
     where
@@ -530,6 +578,18 @@ impl<'a> BenchDatabase for RocksdbBenchDatabase<'a> {
         RocksdbBenchReadTransaction {
             snapshot: self.db.snapshot(),
         }
+    }
+
+    async fn build(path: impl AsRef<Path>) -> Self {
+        let mut bb = rocksdb::BlockBasedOptions::default();
+        bb.set_block_cache(&rocksdb::Cache::new_lru_cache(40 * 1_024 * 1_024));
+
+        let mut opts = rocksdb::Options::default();
+        opts.set_block_based_table_factory(&bb);
+        opts.create_if_missing(true);
+
+        let db = rocksdb::TransactionDB::open(&opts, &Default::default(), path).unwrap();
+        RocksdbBenchDatabase::new(db)
     }
 }
 
@@ -660,7 +720,7 @@ impl<'db, 'txn> BenchReader for RocksdbBenchReader<'db, 'txn> {
                         return;
                     }
                 }
-                yield bincode::deserialize::<BenchItem>(v.as_bytes()).unwrap().string
+                yield bincode::deserialize::<BenchItem>(v.as_bytes()).unwrap().string_1
             }
         }
     }

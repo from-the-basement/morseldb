@@ -8,7 +8,7 @@ use std::{
 };
 
 use async_lock::RwLockReadGuard;
-use lockable::SyncLimit;
+use lockable::AsyncLimit;
 use parquet::errors::ParquetError;
 use thiserror::Error;
 
@@ -137,7 +137,8 @@ where
             // SAFETY: Error is Never
             _key_guards.push(
                 self.lock_map
-                    .blocking_lock(key.clone(), SyncLimit::no_limit())
+                    .async_lock(key.clone(), AsyncLimit::no_limit())
+                    .await
                     .unwrap(),
             );
         }

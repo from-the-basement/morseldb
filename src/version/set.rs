@@ -115,9 +115,8 @@ where
                 VersionEdit::Add { mut scope, level } => {
                     if let Some(wal_ids) = scope.wal_ids.take() {
                         for wal_id in wal_ids {
-                            FP::remove(self.option.wal_path(&wal_id))
-                                .await
-                                .map_err(VersionError::Io)?;
+                            // may have been removed after multiple starts
+                            let _ = FP::remove(self.option.wal_path(&wal_id)).await;
                         }
                     }
                     new_version.level_slice[level as usize].push(scope);
