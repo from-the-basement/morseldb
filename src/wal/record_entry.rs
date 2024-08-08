@@ -1,6 +1,6 @@
 use std::io;
 
-use futures_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     record::{Key, Record},
@@ -62,8 +62,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use futures_util::io::Cursor;
-
+    use std::io::Cursor;
     use crate::{
         serdes::{Decode, Encode},
         timestamp::Timestamped,

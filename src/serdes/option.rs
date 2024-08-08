@@ -1,7 +1,6 @@
 use std::io;
 
-use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use thiserror::Error;
 
 use super::{Decode, Encode};

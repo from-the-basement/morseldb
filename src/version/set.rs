@@ -8,7 +8,8 @@ use std::{
 
 use async_lock::RwLock;
 use flume::Sender;
-use futures_util::{AsyncSeekExt, AsyncWriteExt};
+use tokio::io::AsyncSeekExt;
+use tokio::io::AsyncWriteExt;
 
 use super::MAX_LEVEL;
 use crate::{
@@ -37,7 +38,7 @@ where
     inner: Arc<RwLock<VersionSetInner<R, FP>>>,
     clean_sender: Sender<CleanTag>,
     timestamp: Arc<AtomicU32>,
-    option: Arc<DbOption>,
+    option: Arc<DbOption<R>>,
 }
 
 impl<R, FP> Clone for VersionSet<R, FP>
@@ -62,7 +63,7 @@ where
 {
     pub(crate) async fn new(
         clean_sender: Sender<CleanTag>,
-        option: Arc<DbOption>,
+        option: Arc<DbOption<R>>,
     ) -> Result<Self, VersionError<R>> {
         let mut log = FP::open(option.version_path()).await?;
         let edits = VersionEdit::recover(&mut log).await;
@@ -163,7 +164,7 @@ pub(crate) mod tests {
 
     use async_lock::RwLock;
     use flume::{bounded, Sender};
-    use futures_util::AsyncSeekExt;
+    use tokio::io::AsyncSeekExt;
     use tempfile::TempDir;
 
     use crate::{
@@ -182,7 +183,7 @@ pub(crate) mod tests {
     pub(crate) async fn build_version_set<R, FP>(
         version: Version<R, FP>,
         clean_sender: Sender<CleanTag>,
-        option: Arc<DbOption>,
+        option: Arc<DbOption<R>>,
     ) -> Result<VersionSet<R, FP>, VersionError<R>>
     where
         R: Record,

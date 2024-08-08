@@ -1,7 +1,6 @@
 use std::{io, mem::size_of};
 
-use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
 
 use super::{Decode, Encode};
 

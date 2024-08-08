@@ -428,6 +428,10 @@ pub fn tonbo_record(args: TokenStream, input: TokenStream) -> TokenStream {
                 #primary_key_index
             }
 
+            fn primary_key_path() -> ::parquet::schema::types::ColumnPath {
+                ::parquet::schema::types::ColumnPath::new(vec!["_ts".to_string(), stringify!(#primary_key_name).to_string()])
+            }
+
             fn as_record_ref(&self) -> Self::Ref<'_> {
                 #struct_ref_name {
                     #(#to_ref_init_fields)*
@@ -452,7 +456,7 @@ pub fn tonbo_record(args: TokenStream, input: TokenStream) -> TokenStream {
 
             async fn decode<R>(reader: &mut R) -> Result<Self, Self::Error>
             where
-                R: ::futures_io::AsyncRead + Unpin,
+                R: ::tokio::io::AsyncRead + Unpin,
             {
                 #(#decode_method_fields)*
 
@@ -504,7 +508,7 @@ pub fn tonbo_record(args: TokenStream, input: TokenStream) -> TokenStream {
 
             async fn encode<W>(&self, writer: &mut W) -> Result<(), Self::Error>
             where
-                W: ::futures_io::AsyncWrite + Unpin + Send,
+                W: ::tokio::io::AsyncWrite + Unpin + Send,
             {
                 #(#encode_method_fields)*
 

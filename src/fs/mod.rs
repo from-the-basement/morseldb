@@ -1,4 +1,3 @@
-#[cfg(any(feature = "tokio", test))]
 pub mod tokio;
 
 use std::{
@@ -7,9 +6,8 @@ use std::{
     io,
     path::Path,
 };
-
+use ::tokio::io::{AsyncRead, AsyncSeek, AsyncWrite};
 use futures_core::Stream;
-use futures_io::{AsyncRead, AsyncSeek, AsyncWrite};
 use ulid::Ulid;
 
 pub(crate) type FileId = Ulid;

@@ -1,6 +1,7 @@
+use std::marker::PhantomData;
 use std::path::PathBuf;
-
-use parquet::file::properties::WriterProperties;
+use parquet::basic::Compression;
+use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
 use crate::{
     fs::{FileId, FileProvider, FileType},
@@ -10,7 +11,7 @@ use crate::{
 
 /// configure the operating parameters of each component in the [`DB`](../struct.DB.html)
 #[derive(Debug, Clone)]
-pub struct DbOption {
+pub struct DbOption<R> {
     pub(crate) path: PathBuf,
     pub(crate) max_mutable_len: usize,
     pub(crate) immutable_chunk_num: usize,
@@ -18,15 +19,17 @@ pub struct DbOption {
     pub(crate) level_sst_magnification: usize,
     pub(crate) max_sst_file_size: usize,
     pub(crate) clean_channel_buffer: usize,
-    pub(crate) write_parquet_option: Option<WriterProperties>,
+    pub(crate) write_parquet_properties: WriterProperties,
 
     #[allow(unused)]
     pub(crate) use_wal: bool,
+    _p: PhantomData<R>,
 }
 
-impl<P> From<P> for DbOption
+impl<R, P> From<P> for DbOption<R>
 where
     P: Into<PathBuf>,
+    R: Record,
 {
     /// build the default configured [`DbOption`](struct.DbOption.html) based on the passed path
     fn from(path: P) -> Self {
@@ -38,14 +41,23 @@ where
             level_sst_magnification: 10,
             max_sst_file_size: 24 * 1024 * 1024,
             clean_channel_buffer: 10,
-            write_parquet_option: None,
+            write_parquet_properties: WriterProperties::builder()
+                .set_compression(Compression::SNAPPY)
+                .set_dictionary_enabled(true)
+                .set_column_statistics_enabled(R::primary_key_path(), EnabledStatistics::Page)
+                .set_column_bloom_filter_enabled(R::primary_key_path(), true)
+                .build(),
 
             use_wal: true,
+            _p: Default::default(),
         }
     }
 }
 
-impl DbOption {
+impl<R> DbOption<R>
+where
+    R: Record,
+{
     /// build the [`DB`](../struct.DB.html) storage directory based on the passed path
     pub fn path(self, path: impl Into<PathBuf>) -> Self {
         DbOption {
@@ -103,9 +115,9 @@ impl DbOption {
     }
 
     /// specific settings for Parquet
-    pub fn write_parquet_option(self, write_parquet_option: WriterProperties) -> Self {
+    pub fn write_parquet_option(self, write_parquet_properties: WriterProperties) -> Self {
         DbOption {
-            write_parquet_option: Some(write_parquet_option),
+            write_parquet_properties,
             ..self
         }
     }
@@ -115,7 +127,10 @@ impl DbOption {
     }
 }
 
-impl DbOption {
+impl<R> DbOption<R>
+where
+    R: Record,
+{
     pub(crate) fn table_path(&self, gen: &FileId) -> PathBuf {
         self.path.join(format!("{}.{}", gen, FileType::Parquet))
     }
@@ -133,13 +148,12 @@ impl DbOption {
         self.path.join(format!("version.{}", FileType::Log))
     }
 
-    pub(crate) fn is_threshold_exceeded_major<R, E>(
+    pub(crate) fn is_threshold_exceeded_major<E>(
         &self,
         version: &Version<R, E>,
         level: usize,
     ) -> bool
     where
-        R: Record,
         E: FileProvider,
     {
         Version::<R, E>::tables_len(version, level)

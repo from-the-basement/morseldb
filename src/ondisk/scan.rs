@@ -7,7 +7,6 @@ use std::{
 use futures_core::{ready, Stream};
 use parquet::arrow::{async_reader::ParquetRecordBatchStream, ProjectionMask};
 use pin_project_lite::pin_project;
-use tokio_util::compat::Compat;
 
 use crate::{
     fs::FileProvider,
@@ -22,7 +21,7 @@ pin_project! {
         FP: FileProvider,
     {
         #[pin]
-        stream: ParquetRecordBatchStream<Compat<FP::File>>,
+        stream: ParquetRecordBatchStream<FP::File>,
         iter: Option<RecordBatchIterator<R>>,
         projection_mask: ProjectionMask,
         _marker: PhantomData<&'scan ()>
@@ -34,7 +33,7 @@ where
     FP: FileProvider,
 {
     pub fn new(
-        stream: ParquetRecordBatchStream<Compat<FP::File>>,
+        stream: ParquetRecordBatchStream<FP::File>,
         projection_mask: ProjectionMask,
     ) -> Self {
         SsTableScan {

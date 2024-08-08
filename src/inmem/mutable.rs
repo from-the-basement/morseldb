@@ -46,7 +46,7 @@ where
     FP: FileProvider,
     R: Record,
 {
-    pub async fn new(option: &DbOption) -> io::Result<Self> {
+    pub async fn new(option: &DbOption<R>) -> io::Result<Self> {
         let file_id = Ulid::new();
         let file = FP::open(option.wal_path(&file_id)).await?;
 

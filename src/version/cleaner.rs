@@ -7,24 +7,30 @@ use crate::{
     timestamp::Timestamp,
     DbOption,
 };
+use crate::record::Record;
 
 pub enum CleanTag {
     Add { ts: Timestamp, gens: Vec<FileId> },
     Clean { ts: Timestamp },
 }
 
-pub(crate) struct Cleaner<FP: FileProvider> {
+pub(crate) struct Cleaner<R, FP>
+where
+    R: Record,
+    FP: FileProvider,
+{
     tag_recv: Receiver<CleanTag>,
     gens_map: BTreeMap<Timestamp, (Vec<FileId>, bool)>,
-    option: Arc<DbOption>,
+    option: Arc<DbOption<R>>,
     _p: PhantomData<FP>,
 }
 
-impl<FP> Cleaner<FP>
+impl<R, FP> Cleaner<R, FP>
 where
+    R: Record,
     FP: FileProvider,
 {
-    pub(crate) fn new(option: Arc<DbOption>) -> (Self, Sender<CleanTag>) {
+    pub(crate) fn new(option: Arc<DbOption<R>>) -> (Self, Sender<CleanTag>) {
         let (tag_send, tag_recv) = flume::bounded(option.clean_channel_buffer);
 
         (

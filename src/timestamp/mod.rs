@@ -6,7 +6,7 @@ use arrow::{
     array::{PrimitiveArray, Scalar},
     datatypes::UInt32Type,
 };
-use futures_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 pub(crate) use self::timestamped::*;
 use crate::serdes::{Decode, Encode};

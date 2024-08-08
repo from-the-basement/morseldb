@@ -7,8 +7,7 @@ use std::{
 };
 
 use futures_core::ready;
-use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use pin_project_lite::pin_project;
 
 pin_project! {
@@ -53,8 +52,8 @@ impl<W: AsyncWrite> AsyncWrite for HashWriter<W> {
         self.project().writer.poll_flush(cx)
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.project().writer.poll_close(cx)
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
+        self.project().writer.poll_shutdown(cx)
     }
 }
 
@@ -84,16 +83,12 @@ impl<R: AsyncRead + Unpin> HashReader<R> {
 }
 
 impl<R: AsyncRead> AsyncRead for HashReader<R> {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         let this = self.project();
         Poll::Ready(match ready!(this.reader.poll_read(cx, buf)) {
-            Ok(n) => {
-                this.hasher.write(&buf[..n]);
-                Ok(n)
+            Ok(()) => {
+                this.hasher.write(buf.filled());
+                Ok(())
             }
             e => e,
         })

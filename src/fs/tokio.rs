@@ -4,13 +4,12 @@ use async_stream::stream;
 use futures_core::Stream;
 use regex::Regex;
 use tokio::fs::{create_dir_all, remove_file, File, OpenOptions};
-use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
 use super::{FileId, FileProvider, FileType};
 use crate::executor::tokio::TokioExecutor;
 
 impl FileProvider for TokioExecutor {
-    type File = Compat<File>;
+    type File = File;
 
     async fn create_dir_all(path: impl AsRef<Path>) -> io::Result<()> {
         create_dir_all(path).await
@@ -24,7 +23,6 @@ impl FileProvider for TokioExecutor {
             .read(true)
             .open(path)
             .await
-            .map(TokioAsyncReadCompatExt::compat)
     }
 
     async fn remove(path: impl AsRef<Path> + Send) -> io::Result<()> {

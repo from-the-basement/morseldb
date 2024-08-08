@@ -48,7 +48,7 @@ where
     lower: Bound<&'level R::Key>,
     upper: Bound<&'level R::Key>,
     ts: Timestamp,
-    option: Arc<DbOption>,
+    option: Arc<DbOption<R>>,
     gens: VecDeque<FileId>,
     limit: Option<usize>,
     projection_mask: ProjectionMask,

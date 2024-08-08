@@ -6,7 +6,7 @@ use std::{
     ptr,
 };
 
-use futures_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     serdes::{Decode, Encode},
