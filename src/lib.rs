@@ -357,7 +357,7 @@ where
     FP: FileProvider,
 {
     mutable: Mutable<R, FP>,
-    immutables: VecDeque<(FileId, Immutable<R::Columns>)>,
+    immutables: VecDeque<(Option<FileId>, Immutable<R::Columns>)>,
     compaction_tx: Sender<CompactTask>,
     option: Arc<DbOption<R>>,
     recover_wal_ids: Option<Vec<FileId>>,
@@ -995,7 +995,7 @@ pub(crate) mod tests {
                 .await
                 .unwrap();
 
-            VecDeque::from(vec![(FileId::new(), Immutable::from(mutable.data))])
+            VecDeque::from(vec![(Some(FileId::new()), Immutable::from(mutable.data))])
         };
 
         let (compaction_tx, compaction_rx) = bounded(1);

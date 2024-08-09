@@ -38,7 +38,7 @@ where
     FP: FileProvider,
 {
     pub(crate) data: SkipMap<Timestamped<R::Key>, Option<R>>,
-    wal: Mutex<WalFile<FP::File, R>>,
+    wal: Option<Mutex<WalFile<FP::File, R>>>,
 }
 
 impl<R, FP> Mutable<R, FP>
@@ -47,12 +47,17 @@ where
     R: Record,
 {
     pub async fn new(option: &DbOption<R>) -> io::Result<Self> {
-        let file_id = Ulid::new();
-        let file = FP::open(option.wal_path(&file_id)).await?;
+        let mut wal = None;
+        if option.use_wal {
+            let file_id = Ulid::new();
+            let file = FP::open(option.wal_path(&file_id)).await?;
+
+            wal = Some(Mutex::new(WalFile::new(file, file_id)));
+        };
 
         Ok(Self {
             data: Default::default(),
-            wal: Mutex::new(WalFile::new(file, file_id)),
+            wal,
         })
     }
 }
@@ -90,17 +95,17 @@ where
     ) -> Result<usize, DbError<R>> {
         let timestamped_key = Timestamped::new(key, ts);
 
-        if let Some(log_ty) = log_ty {
-            // let mut wal_guard = self.wal.lock().await;
-            //
-            // wal_guard
-            //     .write(
-            //         log_ty,
-            //         timestamped_key.map(|key| unsafe { transmute(key.as_key_ref()) }),
-            //         value.as_ref().map(R::as_record_ref),
-            //     )
-            //     .await
-            //     .unwrap();
+        if let (Some(log_ty), Some(wal)) = (log_ty, &self.wal) {
+            let mut wal_guard = wal.lock().await;
+
+            wal_guard
+                .write(
+                    log_ty,
+                    timestamped_key.map(|key| unsafe { transmute(key.as_key_ref()) }),
+                    value.as_ref().map(R::as_record_ref),
+                )
+                .await
+                .unwrap();
             // .map_err(WriteError::Encode)?;
         }
         self.data.insert(timestamped_key, value);
@@ -154,12 +159,14 @@ where
             .is_some()
     }
 
-    pub(crate) async fn into_immutable(self) -> io::Result<(FileId, Immutable<R::Columns>)> {
-        let file_id = {
-            let mut wal_guard = self.wal.lock().await;
+    pub(crate) async fn into_immutable(self) -> io::Result<(Option<FileId>, Immutable<R::Columns>)> {
+        let mut file_id = None;
+
+        if let Some(wal) = self.wal {
+            let mut wal_guard = wal.lock().await;
             wal_guard.flush().await?;
-            wal_guard.file_id()
-        };
+            file_id = Some(wal_guard.file_id());
+        }
 
         Ok((file_id, Immutable::from(self.data)))
     }

@@ -20,8 +20,6 @@ pub struct DbOption<R> {
     pub(crate) max_sst_file_size: usize,
     pub(crate) clean_channel_buffer: usize,
     pub(crate) write_parquet_properties: WriterProperties,
-
-    #[allow(unused)]
     pub(crate) use_wal: bool,
     _p: PhantomData<R>,
 }
@@ -45,9 +43,8 @@ where
             clean_channel_buffer: 10,
             write_parquet_properties: WriterProperties::builder()
                 .set_compression(Compression::SNAPPY)
-                .set_dictionary_enabled(true)
                 .set_column_statistics_enabled(column_paths.clone(), EnabledStatistics::Page)
-                .set_column_bloom_filter_enabled(column_paths, true)
+                .set_column_bloom_filter_enabled(column_paths.clone(), true)
                 .set_max_row_group_size(256)
                 .set_sorting_columns(Some(sorting_columns))
                 .build(),

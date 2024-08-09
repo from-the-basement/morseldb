@@ -117,7 +117,7 @@ where
     pub(crate) async fn minor_compaction(
         option: &DbOption<R>,
         recover_wal_ids: Option<Vec<FileId>>,
-        batches: VecDeque<(FileId, Immutable<R::Columns>)>,
+        batches: VecDeque<(Option<FileId>, Immutable<R::Columns>)>,
     ) -> Result<Option<Scope<R::Key>>, CompactionError<R>> {
         if !batches.is_empty() {
             let mut min = None;
@@ -145,7 +145,9 @@ where
                     }
                 }
                 writer.write(batch.as_record_batch()).await?;
-                wal_ids.push(file_id);
+                if let Some(file_id) = file_id {
+                    wal_ids.push(file_id);
+                }
             }
             writer.close().await?;
             return Ok(Some(Scope {
@@ -569,7 +571,7 @@ pub(crate) mod tests {
         let scope = Compactor::<Test, TokioExecutor>::minor_compaction(
             &DbOption::from(temp_dir.path()),
             None,
-            VecDeque::from(vec![(FileId::new(), batch_2), (FileId::new(), batch_1)]),
+            VecDeque::from(vec![(Some(FileId::new()), batch_2), (Some(FileId::new()), batch_1)]),
         )
         .await
         .unwrap()

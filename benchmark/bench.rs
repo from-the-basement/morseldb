@@ -115,41 +115,41 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
     );
     results.push(("individual writes".to_string(), duration));
 
-    // for num_threads in [4, 16] {
-    //     let mut rngs = make_rng_shards(num_threads, ELEMENTS);
-    //     let start = Instant::now();
-    //     let writes = 100;
-    //
-    //     let futures = (0..num_threads).map(|_| {
-    //         let db2 = db.clone();
-    //         let mut rng = rngs.pop().unwrap();
-    //
-    //         async move {
-    //             for _ in 0..writes {
-    //                 let mut txn = db2.write_transaction().await;
-    //                 let mut inserter = txn.get_inserter();
-    //                 inserter.insert(gen_record(&mut rng)).unwrap();
-    //                 drop(inserter);
-    //                 txn.commit().await.unwrap();
-    //             }
-    //         }
-    //     });
-    //     join_all(futures).await;
-    //
-    //     let end = Instant::now();
-    //     let duration = end - start;
-    //     println!(
-    //         "{}: Wrote {} individual items ({} threads) in {}ms",
-    //         T::db_type_name(),
-    //         writes,
-    //         num_threads,
-    //         duration.as_millis()
-    //     );
-    //     results.push((
-    //         format!("individual writes ({num_threads} threads)"),
-    //         duration,
-    //     ));
-    // }
+    for num_threads in [4, 16] {
+        let mut rngs = make_rng_shards(num_threads, WRITE_TIMES);
+        let start = Instant::now();
+        let writes = 100;
+
+        let futures = (0..num_threads).map(|_| {
+            let db2 = db.clone();
+            let mut rng = rngs.pop().unwrap();
+
+            async move {
+                for _ in 0..writes {
+                    let mut txn = db2.write_transaction().await;
+                    let mut inserter = txn.get_inserter();
+                    inserter.insert(gen_record(&mut rng)).unwrap();
+                    drop(inserter);
+                    txn.commit().await.unwrap();
+                }
+            }
+        });
+        join_all(futures).await;
+
+        let end = Instant::now();
+        let duration = end - start;
+        println!(
+            "{}: Wrote {} individual items ({} threads) in {}ms",
+            T::db_type_name(),
+            writes,
+            num_threads,
+            duration.as_millis()
+        );
+        results.push((
+            format!("individual writes ({num_threads} threads)"),
+            duration,
+        ));
+    }
 
     let start = Instant::now();
     let batch_size = 1000;
@@ -176,41 +176,41 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
     );
     results.push(("batch writes".to_string(), duration));
 
-    // for num_threads in [4, 16] {
-    //     let mut rngs = make_rng_shards(num_threads, ELEMENTS);
-    //     let start = Instant::now();
-    //     let writes = 100;
-    //
-    //     let futures = (0..num_threads).map(|_| {
-    //         let db2 = db.clone();
-    //         let mut rng = rngs.pop().unwrap();
-    //
-    //         async move {
-    //             for _ in 0..writes {
-    //                 let mut txn = db2.write_transaction().await;
-    //                 let mut inserter = txn.get_inserter();
-    //                 for _ in 0..batch_size {
-    //                     inserter.insert(gen_record(&mut rng)).unwrap();
-    //                 }
-    //                 drop(inserter);
-    //                 txn.commit().await.unwrap();
-    //             }
-    //         }
-    //     });
-    //     join_all(futures).await;
-    //
-    //     let end = Instant::now();
-    //     let duration = end - start;
-    //     println!(
-    //         "{}: Wrote {} x {} items ({} threads) in {}ms",
-    //         T::db_type_name(),
-    //         writes,
-    //         batch_size,
-    //         num_threads,
-    //         duration.as_millis()
-    //     );
-    //     results.push((format!("batch writes ({num_threads} threads)"), duration));
-    // }
+    for num_threads in [4, 16] {
+        let mut rngs = make_rng_shards(num_threads, WRITE_TIMES);
+        let start = Instant::now();
+        let writes = 100;
+
+        let futures = (0..num_threads).map(|_| {
+            let db2 = db.clone();
+            let mut rng = rngs.pop().unwrap();
+
+            async move {
+                for _ in 0..writes {
+                    let mut txn = db2.write_transaction().await;
+                    let mut inserter = txn.get_inserter();
+                    for _ in 0..batch_size {
+                        inserter.insert(gen_record(&mut rng)).unwrap();
+                    }
+                    drop(inserter);
+                    txn.commit().await.unwrap();
+                }
+            }
+        });
+        join_all(futures).await;
+
+        let end = Instant::now();
+        let duration = end - start;
+        println!(
+            "{}: Wrote {} x {} items ({} threads) in {}ms",
+            T::db_type_name(),
+            writes,
+            batch_size,
+            num_threads,
+            duration.as_millis()
+        );
+        results.push((format!("batch writes ({num_threads} threads)"), duration));
+    }
 
     drop(db);
     let db = Arc::new(T::build(path).await);
@@ -309,36 +309,36 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
     }
     drop(txn);
 
-    // for num_threads in [4, 8, 16, 32] {
-    //     let mut rngs = make_rng_shards(num_threads, ELEMENTS);
-    //     let start = Instant::now();
-    //
-    //     let futures = (0..num_threads).map(|_| {
-    //         let db2 = db.clone();
-    //         let mut rng = rngs.pop().unwrap();
-    //
-    //         async move {
-    //             let txn = db2.read_transaction().await;
-    //             let reader = txn.get_reader();
-    //             for _ in 0..(ELEMENTS / num_threads) {
-    //                 let record = gen_record(&mut rng);
-    //                 let _ = reader.get(&record.primary_key);
-    //             }
-    //         }
-    //     });
-    //     join_all(futures).await;
-    //
-    //     let end = Instant::now();
-    //     let duration = end - start;
-    //     println!(
-    //         "{}: Random read ({} threads) {} items in {}ms",
-    //         T::db_type_name(),
-    //         num_threads,
-    //         ELEMENTS,
-    //         duration.as_millis()
-    //     );
-    //     results.push((format!("random reads ({num_threads} threads)"), duration));
-    // }
+    for num_threads in [4, 8, 16, 32] {
+        let mut rngs = make_rng_shards(num_threads, WRITE_TIMES);
+        let start = Instant::now();
+
+        let futures = (0..num_threads).map(|_| {
+            let db2 = db.clone();
+            let mut rng = rngs.pop().unwrap();
+
+            async move {
+                let txn = db2.read_transaction().await;
+                let reader = txn.get_reader();
+                for _ in 0..(WRITE_TIMES / num_threads) {
+                    let record = gen_record(&mut rng);
+                    let _ = reader.get(&record.primary_key);
+                }
+            }
+        });
+        join_all(futures).await;
+
+        let end = Instant::now();
+        let duration = end - start;
+        println!(
+            "{}: Random read ({} threads) {} items in {}ms",
+            T::db_type_name(),
+            num_threads,
+            WRITE_TIMES,
+            duration.as_millis()
+        );
+        results.push((format!("random reads ({num_threads} threads)"), duration));
+    }
 
     let start = Instant::now();
     let deletes = WRITE_TIMES / 2;
