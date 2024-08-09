@@ -8,8 +8,7 @@ use std::{
 
 use async_lock::RwLock;
 use flume::Sender;
-use tokio::io::AsyncSeekExt;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 use super::MAX_LEVEL;
 use crate::{
@@ -164,8 +163,8 @@ pub(crate) mod tests {
 
     use async_lock::RwLock;
     use flume::{bounded, Sender};
-    use tokio::io::AsyncSeekExt;
     use tempfile::TempDir;
+    use tokio::io::AsyncSeekExt;
 
     use crate::{
         executor::tokio::TokioExecutor,

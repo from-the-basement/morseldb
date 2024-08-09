@@ -1,10 +1,4 @@
-use std::{
-    borrow::Borrow,
-    cmp::Ordering,
-    marker::PhantomData,
-    mem::{size_of, transmute},
-    ptr,
-};
+use std::{borrow::Borrow, cmp::Ordering, marker::PhantomData, mem::size_of, ptr};
 
 use tokio::io::{AsyncRead, AsyncWrite};
 

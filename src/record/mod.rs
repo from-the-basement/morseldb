@@ -8,9 +8,7 @@ use std::{error::Error, fmt::Debug, io, sync::Arc};
 use arrow::{array::RecordBatch, datatypes::Schema};
 use internal::InternalRecordRef;
 pub use key::{Key, KeyRef};
-use parquet::arrow::ProjectionMask;
-use parquet::format::SortingColumn;
-use parquet::schema::types::ColumnPath;
+use parquet::{arrow::ProjectionMask, format::SortingColumn, schema::types::ColumnPath};
 use thiserror::Error;
 
 use crate::{

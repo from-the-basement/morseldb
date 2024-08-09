@@ -4,14 +4,14 @@ use std::{
     collections::Bound,
     env::current_dir,
     fs,
+    path::Path,
     sync::Arc,
     time::{Duration, Instant},
 };
-use std::path::Path;
+
 use common::*;
 use futures_util::{future::join_all, StreamExt};
 use tempfile::{NamedTempFile, TempDir};
-use tonbo::{executor::tokio::TokioExecutor, DbOption, DB};
 
 const ITERATIONS: usize = 2;
 const WRITE_TIMES: usize = 10_000;
@@ -67,7 +67,9 @@ fn make_rng_shards(shards: usize, elements: usize) -> Vec<fastrand::Rng> {
     rngs
 }
 
-async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clone) -> Vec<(String, Duration)> {
+async fn benchmark<T: BenchDatabase + Send + Sync>(
+    path: impl AsRef<Path> + Clone,
+) -> Vec<(String, Duration)> {
     let mut rng = make_rng();
     let mut results = Vec::new();
     let db = Arc::new(T::build(path.clone()).await);
@@ -284,9 +286,10 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(path: impl AsRef<Path> + Clon
             let num_scan = 10;
             for _ in 0..READ_TIMES {
                 let record = gen_record(&mut rng);
-                let mut iter = Box::pin(
-                    reader.projection_range_from((Bound::Included(&record.primary_key),
-    Bound::Unbounded)),             );
+                let mut iter = Box::pin(reader.projection_range_from((
+                    Bound::Included(&record.primary_key),
+                    Bound::Unbounded,
+                )));
                 for _ in 0..num_scan {
                     if let Some(_projection_field) = iter.next().await {
                         value_sum += 1;

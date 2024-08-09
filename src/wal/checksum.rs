@@ -7,8 +7,8 @@ use std::{
 };
 
 use futures_core::ready;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use pin_project_lite::pin_project;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 
 pin_project! {
     pub(crate) struct HashWriter<W: AsyncWrite> {
@@ -83,7 +83,11 @@ impl<R: AsyncRead + Unpin> HashReader<R> {
 }
 
 impl<R: AsyncRead> AsyncRead for HashReader<R> {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
         let this = self.project();
         Poll::Ready(match ready!(this.reader.poll_read(cx, buf)) {
             Ok(()) => {

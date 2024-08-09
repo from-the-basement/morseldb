@@ -7,9 +7,9 @@ use std::{io, marker::PhantomData};
 use async_stream::stream;
 use checksum::{HashReader, HashWriter};
 use futures_core::Stream;
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use log::Log;
 use thiserror::Error;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::{
     fs::FileId,

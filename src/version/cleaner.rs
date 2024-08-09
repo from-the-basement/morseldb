@@ -4,10 +4,10 @@ use flume::{Receiver, Sender};
 
 use crate::{
     fs::{FileId, FileProvider},
+    record::Record,
     timestamp::Timestamp,
     DbOption,
 };
-use crate::record::Record;
 
 pub enum CleanTag {
     Add { ts: Timestamp, gens: Vec<FileId> },

@@ -664,12 +664,10 @@ pub(crate) mod tests {
     };
     use async_lock::RwLock;
     use flume::{bounded, Receiver};
-    use tokio::io;
     use once_cell::sync::Lazy;
-    use parquet::arrow::ProjectionMask;
-    use parquet::format::SortingColumn;
-    use parquet::schema::types::ColumnPath;
+    use parquet::{arrow::ProjectionMask, format::SortingColumn, schema::types::ColumnPath};
     use tempfile::TempDir;
+    use tokio::io;
     use tracing::error;
 
     use crate::{
@@ -748,7 +746,10 @@ pub(crate) mod tests {
         fn primary_key_path() -> (ColumnPath, Vec<SortingColumn>) {
             (
                 ColumnPath::new(vec!["_ts".to_string(), "vstring".to_string()]),
-                vec![SortingColumn::new(1, true, true), SortingColumn::new(2, false, true)]
+                vec![
+                    SortingColumn::new(1, true, true),
+                    SortingColumn::new(2, false, true),
+                ],
             )
         }
 

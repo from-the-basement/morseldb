@@ -63,6 +63,7 @@ where
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
+
     use crate::{
         serdes::{Decode, Encode},
         timestamp::Timestamped,

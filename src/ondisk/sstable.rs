@@ -12,6 +12,7 @@ use parquet::{
     file::properties::WriterProperties,
 };
 use tokio::io::BufReader;
+
 use super::{arrows::get_range_filter, scan::SsTableScan};
 use crate::{
     fs::{AsyncFile, FileProvider},

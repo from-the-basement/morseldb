@@ -8,6 +8,7 @@ use futures_core::{ready, Stream};
 use parquet::arrow::{async_reader::ParquetRecordBatchStream, ProjectionMask};
 use pin_project_lite::pin_project;
 use tokio::io::BufReader;
+
 use crate::{
     fs::FileProvider,
     record::Record,

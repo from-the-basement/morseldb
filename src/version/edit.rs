@@ -120,6 +120,7 @@ where
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
+
     use crate::{fs::FileId, scope::Scope, serdes::Encode, version::edit::VersionEdit};
 
     #[tokio::test]

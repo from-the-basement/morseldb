@@ -571,7 +571,10 @@ pub(crate) mod tests {
         let scope = Compactor::<Test, TokioExecutor>::minor_compaction(
             &DbOption::from(temp_dir.path()),
             None,
-            VecDeque::from(vec![(Some(FileId::new()), batch_2), (Some(FileId::new()), batch_1)]),
+            VecDeque::from(vec![
+                (Some(FileId::new()), batch_2),
+                (Some(FileId::new()), batch_1),
+            ]),
         )
         .await
         .unwrap()

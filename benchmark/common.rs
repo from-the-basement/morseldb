@@ -1,13 +1,17 @@
-use std::{collections::Bound, fs, fs::File, path, path::Path};
-use std::path::PathBuf;
+use std::{
+    collections::Bound,
+    fs,
+    fs::File,
+    path::{Path, PathBuf},
+};
+
 use async_stream::stream;
 use futures_core::Stream;
 use futures_util::StreamExt;
 use parquet::data_type::AsBytes;
 use redb::TableDefinition;
 use rocksdb::{Direction, IteratorMode, TransactionDB};
-use tempfile::TempDir;
-use tonbo::{executor::tokio::TokioExecutor, record::KeyRef, Projection, DbOption};
+use tonbo::{executor::tokio::TokioExecutor, record::KeyRef, DbOption, Projection};
 use tonbo_marco::tonbo_record;
 
 #[allow(dead_code)]
@@ -124,12 +128,9 @@ impl BenchDatabase for TonboBenchDataBase {
     }
 
     async fn build(path: impl AsRef<Path>) -> Self {
-        let option = DbOption::from(path.as_ref())
-            .use_wal(false);
+        let option = DbOption::from(path.as_ref()).use_wal(false);
 
-        let db = tonbo::DB::new(option, TokioExecutor::new())
-            .await
-            .unwrap();
+        let db = tonbo::DB::new(option, TokioExecutor::new()).await.unwrap();
         TonboBenchDataBase::new(db)
     }
 }

@@ -159,7 +159,9 @@ where
             .is_some()
     }
 
-    pub(crate) async fn into_immutable(self) -> io::Result<(Option<FileId>, Immutable<R::Columns>)> {
+    pub(crate) async fn into_immutable(
+        self,
+    ) -> io::Result<(Option<FileId>, Immutable<R::Columns>)> {
         let mut file_id = None;
 
         if let Some(wal) = self.wal {

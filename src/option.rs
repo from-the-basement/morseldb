@@ -1,8 +1,10 @@
-use std::marker::PhantomData;
-use std::path::PathBuf;
-use parquet::basic::Compression;
-use parquet::file::properties::{EnabledStatistics, WriterProperties};
-use parquet::format::SortingColumn;
+use std::{marker::PhantomData, path::PathBuf};
+
+use parquet::{
+    basic::Compression,
+    file::properties::{EnabledStatistics, WriterProperties},
+};
+
 use crate::{
     fs::{FileId, FileProvider, FileType},
     record::Record,

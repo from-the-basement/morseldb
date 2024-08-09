@@ -1,5 +1,5 @@
-use std::{mem, sync::Arc};
-use std::string::ToString;
+use std::{mem, string::ToString, sync::Arc};
+
 use arrow::{
     array::{
         Array, AsArray, BooleanArray, BooleanBufferBuilder, RecordBatch, StringArray,
@@ -8,9 +8,8 @@ use arrow::{
     datatypes::{DataType, Field, Schema, UInt32Type},
 };
 use once_cell::sync::Lazy;
-use parquet::arrow::ProjectionMask;
-use parquet::format::SortingColumn;
-use parquet::schema::types::ColumnPath;
+use parquet::{arrow::ProjectionMask, format::SortingColumn, schema::types::ColumnPath};
+
 use super::{internal::InternalRecordRef, Key, Record, RecordRef};
 use crate::{
     inmem::immutable::{ArrowArrays, Builder},
@@ -39,7 +38,10 @@ impl Record for String {
     fn primary_key_path() -> (ColumnPath, Vec<SortingColumn>) {
         (
             ColumnPath::new(vec!["_ts".to_string(), PRIMARY_FIELD_NAME.to_string()]),
-            vec![SortingColumn::new(1, true, true), SortingColumn::new(2, false, true)]
+            vec![
+                SortingColumn::new(1, true, true),
+                SortingColumn::new(2, false, true),
+            ],
         )
     }
 
