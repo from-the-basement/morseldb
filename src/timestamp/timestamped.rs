@@ -1,12 +1,6 @@
-use std::{
-    borrow::Borrow,
-    cmp::Ordering,
-    marker::PhantomData,
-    mem::{size_of, transmute},
-    ptr,
-};
+use std::{borrow::Borrow, cmp::Ordering, marker::PhantomData, mem::size_of, ptr};
 
-use futures_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     serdes::{Decode, Encode},

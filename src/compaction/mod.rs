@@ -10,7 +10,6 @@ use async_lock::RwLock;
 use futures_util::StreamExt;
 use parquet::arrow::{AsyncArrowWriter, ProjectionMask};
 use thiserror::Error;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
 use ulid::Ulid;
 
 use crate::{
@@ -37,7 +36,7 @@ where
     R: Record,
     FP: FileProvider,
 {
-    pub(crate) option: Arc<DbOption>,
+    pub(crate) option: Arc<DbOption<R>>,
     pub(crate) schema: Arc<RwLock<Schema<R, FP>>>,
     pub(crate) version_set: VersionSet<R, FP>,
 }
@@ -49,7 +48,7 @@ where
 {
     pub(crate) fn new(
         schema: Arc<RwLock<Schema<R, FP>>>,
-        option: Arc<DbOption>,
+        option: Arc<DbOption<R>>,
         version_set: VersionSet<R, FP>,
     ) -> Self {
         Compactor::<R, FP> {
@@ -116,9 +115,9 @@ where
     }
 
     pub(crate) async fn minor_compaction(
-        option: &DbOption,
+        option: &DbOption<R>,
         recover_wal_ids: Option<Vec<FileId>>,
-        batches: VecDeque<(FileId, Immutable<R::Columns>)>,
+        batches: VecDeque<(Option<FileId>, Immutable<R::Columns>)>,
     ) -> Result<Option<Scope<R::Key>>, CompactionError<R>> {
         if !batches.is_empty() {
             let mut min = None;
@@ -128,9 +127,9 @@ where
             let mut wal_ids = Vec::with_capacity(batches.len());
 
             let mut writer = AsyncArrowWriter::try_new(
-                FP::open(option.table_path(&gen)).await?.compat(),
+                FP::open(option.table_path(&gen)).await?,
                 R::arrow_schema().clone(),
-                option.write_parquet_option.clone(),
+                Some(option.write_parquet_properties.clone()),
             )?;
 
             if let Some(mut recover_wal_ids) = recover_wal_ids {
@@ -146,7 +145,9 @@ where
                     }
                 }
                 writer.write(batch.as_record_batch()).await?;
-                wal_ids.push(file_id);
+                if let Some(file_id) = file_id {
+                    wal_ids.push(file_id);
+                }
             }
             writer.close().await?;
             return Ok(Some(Scope {
@@ -161,7 +162,7 @@ where
 
     pub(crate) async fn major_compaction(
         version: &Version<R, FP>,
-        option: &DbOption,
+        option: &DbOption<R>,
         mut min: &R::Key,
         mut max: &R::Key,
         version_edits: &mut Vec<VersionEdit<R::Key>>,
@@ -318,7 +319,7 @@ where
     }
 
     async fn build_tables<'scan>(
-        option: &DbOption,
+        option: &DbOption<R>,
         version_edits: &mut Vec<VersionEdit<<R as Record>::Key>>,
         level: usize,
         streams: Vec<ScanStream<'scan, R, FP>>,
@@ -378,7 +379,7 @@ where
     }
 
     async fn build_table(
-        option: &DbOption,
+        option: &DbOption<R>,
         version_edits: &mut Vec<VersionEdit<R::Key>>,
         level: usize,
         builder: &mut <R::Columns as ArrowArrays>::Builder,
@@ -391,9 +392,9 @@ where
         let gen = Ulid::new();
         let columns = builder.finish(None);
         let mut writer = AsyncArrowWriter::try_new(
-            FP::open(option.table_path(&gen)).await?.compat(),
+            FP::open(option.table_path(&gen)).await?,
             R::arrow_schema().clone(),
-            option.write_parquet_option.clone(),
+            Some(option.write_parquet_properties.clone()),
         )?;
         writer.write(columns.as_record_batch()).await?;
         writer.close().await?;
@@ -435,7 +436,6 @@ pub(crate) mod tests {
     use flume::bounded;
     use parquet::{arrow::AsyncArrowWriter, errors::ParquetError};
     use tempfile::TempDir;
-    use tokio_util::compat::FuturesAsyncReadCompatExt;
 
     use crate::{
         compaction::Compactor,
@@ -452,7 +452,7 @@ pub(crate) mod tests {
     };
 
     async fn build_immutable<R, FP>(
-        option: &DbOption,
+        option: &DbOption<R>,
         records: Vec<(LogType, R, Timestamp)>,
     ) -> Result<Immutable<R::Columns>, DbError<R>>
     where
@@ -468,7 +468,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) async fn build_parquet_table<R, FP>(
-        option: &DbOption,
+        option: &DbOption<R>,
         gen: FileId,
         records: Vec<(LogType, R, Timestamp)>,
     ) -> Result<(), DbError<R>>
@@ -480,8 +480,7 @@ pub(crate) mod tests {
         let mut writer = AsyncArrowWriter::try_new(
             FP::open(option.table_path(&gen))
                 .await
-                .map_err(ParquetError::from)?
-                .compat(),
+                .map_err(ParquetError::from)?,
             R::arrow_schema().clone(),
             None,
         )?;
@@ -572,7 +571,10 @@ pub(crate) mod tests {
         let scope = Compactor::<Test, TokioExecutor>::minor_compaction(
             &DbOption::from(temp_dir.path()),
             None,
-            VecDeque::from(vec![(FileId::new(), batch_2), (FileId::new(), batch_1)]),
+            VecDeque::from(vec![
+                (Some(FileId::new()), batch_2),
+                (Some(FileId::new()), batch_1),
+            ]),
         )
         .await
         .unwrap()
@@ -635,7 +637,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) async fn build_version(
-        option: &Arc<DbOption>,
+        option: &Arc<DbOption<Test>>,
     ) -> (
         (FileId, FileId, FileId, FileId, FileId),
         Version<Test, TokioExecutor>,

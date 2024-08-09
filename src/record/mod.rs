@@ -8,7 +8,7 @@ use std::{error::Error, fmt::Debug, io, sync::Arc};
 use arrow::{array::RecordBatch, datatypes::Schema};
 use internal::InternalRecordRef;
 pub use key::{Key, KeyRef};
-use parquet::arrow::ProjectionMask;
+use parquet::{arrow::ProjectionMask, format::SortingColumn, schema::types::ColumnPath};
 use thiserror::Error;
 
 use crate::{
@@ -30,6 +30,8 @@ pub trait Record: 'static + Sized + Decode + Debug + Send + Sync {
     }
 
     fn primary_key_index() -> usize;
+
+    fn primary_key_path() -> (ColumnPath, Vec<SortingColumn>);
 
     fn as_record_ref(&self) -> Self::Ref<'_>;
 

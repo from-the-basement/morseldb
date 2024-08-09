@@ -6,13 +6,17 @@ name = "tonbo"
 resolver = "2"
 version = "0.0.0"
 
-[features]
-tokio = ["dep:tokio"]
-
 [[example]]
 name = "declare"
 path = "examples/declare.rs"
-required-features = ["tokio"]
+
+[[bench]]
+name = "benchmark"
+path = "benchmark/bench.rs"
+harness = false
+
+[target.'cfg(unix)'.dev-dependencies]
+pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
 
 [dependencies]
 arrow = "52"
@@ -30,14 +34,21 @@ parquet = { version = "52", features = ["async"] }
 pin-project-lite = "0.2"
 regex = "1"
 thiserror = "1"
-tokio = { version = "1", optional = true }
-tokio-util = { version = "0.7", features = ["compat"] }
+tokio = { version = "1", features = ["fs", "io-util"] }
+tokio-util = { version = "0.7" }
 tonbo_marco = { path = "tonbo_marco" }
 tracing = "0.1"
 ulid = "1"
 
-
 [dev-dependencies]
+bincode = "1"
+comfy-table = "7"
+criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+fastrand = "2"
+redb = "2"
+rocksdb = "0.22"
+serde = "1"
+sled = "0.34"
 tempfile = "3"
 tokio = { version = "1", features = ["full"] }
 

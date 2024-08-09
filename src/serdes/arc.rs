@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use futures_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use super::{Decode, Encode};
 

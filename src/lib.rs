@@ -119,9 +119,9 @@ pub mod option;
 pub mod record;
 mod scope;
 pub mod serdes;
-mod stream;
+pub mod stream;
 pub mod timestamp;
-mod transaction;
+pub mod transaction;
 mod version;
 mod wal;
 
@@ -189,14 +189,14 @@ where
     /// [`DbOption`](struct.DbOption.html).
     ///
     /// For more configurable options, please refer to [`DbOption`](struct.DbOption.html)
-    pub async fn new(option: DbOption, executor: E) -> Result<Self, DbError<R>> {
+    pub async fn new(option: DbOption<R>, executor: E) -> Result<Self, DbError<R>> {
         let option = Arc::new(option);
         E::create_dir_all(&option.path).await?;
         E::create_dir_all(&option.wal_dir_path()).await?;
 
         let (task_tx, task_rx) = bounded(1);
 
-        let (mut cleaner, clean_sender) = Cleaner::<E>::new(option.clone());
+        let (mut cleaner, clean_sender) = Cleaner::<R, E>::new(option.clone());
 
         let version_set = VersionSet::new(clean_sender, option.clone()).await?;
         let schema = Arc::new(RwLock::new(
@@ -357,9 +357,9 @@ where
     FP: FileProvider,
 {
     mutable: Mutable<R, FP>,
-    immutables: VecDeque<(FileId, Immutable<R::Columns>)>,
+    immutables: VecDeque<(Option<FileId>, Immutable<R::Columns>)>,
     compaction_tx: Sender<CompactTask>,
-    option: Arc<DbOption>,
+    option: Arc<DbOption<R>>,
     recover_wal_ids: Option<Vec<FileId>>,
 }
 
@@ -369,7 +369,7 @@ where
     FP: FileProvider,
 {
     async fn new(
-        option: Arc<DbOption>,
+        option: Arc<DbOption<R>>,
         compaction_tx: Sender<CompactTask>,
         version_set: &VersionSet<R, FP>,
     ) -> Result<Self, DbError<R>> {
@@ -664,10 +664,10 @@ pub(crate) mod tests {
     };
     use async_lock::RwLock;
     use flume::{bounded, Receiver};
-    use futures_util::io;
     use once_cell::sync::Lazy;
-    use parquet::arrow::ProjectionMask;
+    use parquet::{arrow::ProjectionMask, format::SortingColumn, schema::types::ColumnPath};
     use tempfile::TempDir;
+    use tokio::io;
     use tracing::error;
 
     use crate::{
@@ -682,7 +682,7 @@ pub(crate) mod tests {
         DbError, DbOption, Immutable, Projection, Record, DB,
     };
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct Test {
         pub vstring: String,
         pub vu32: u32,
@@ -694,7 +694,7 @@ pub(crate) mod tests {
 
         async fn decode<R>(reader: &mut R) -> Result<Self, Self::Error>
         where
-            R: futures_io::AsyncRead + Unpin,
+            R: tokio::io::AsyncRead + Unpin,
         {
             let vstring =
                 String::decode(reader)
@@ -741,6 +741,16 @@ pub(crate) mod tests {
 
         fn primary_key_index() -> usize {
             2
+        }
+
+        fn primary_key_path() -> (ColumnPath, Vec<SortingColumn>) {
+            (
+                ColumnPath::new(vec!["_ts".to_string(), "vstring".to_string()]),
+                vec![
+                    SortingColumn::new(1, true, true),
+                    SortingColumn::new(2, false, true),
+                ],
+            )
         }
 
         fn as_record_ref(&self) -> Self::Ref<'_> {
@@ -869,7 +879,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) async fn get_test_record_batch<E: Executor + Send + Sync + 'static>(
-        option: DbOption,
+        option: DbOption<Test>,
         executor: E,
     ) -> RecordBatch {
         let db: DB<Test, E> = DB::new(option.clone(), executor).await.unwrap();
@@ -905,7 +915,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) async fn build_schema(
-        option: Arc<DbOption>,
+        option: Arc<DbOption<Test>>,
     ) -> io::Result<(crate::Schema<Test, TokioExecutor>, Receiver<CompactTask>)> {
         let mutable = Mutable::new(&option).await?;
 
@@ -986,7 +996,7 @@ pub(crate) mod tests {
                 .await
                 .unwrap();
 
-            VecDeque::from(vec![(FileId::new(), Immutable::from(mutable.data))])
+            VecDeque::from(vec![(Some(FileId::new()), Immutable::from(mutable.data))])
         };
 
         let (compaction_tx, compaction_rx) = bounded(1);
@@ -1004,7 +1014,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) async fn build_db<R, E>(
-        option: Arc<DbOption>,
+        option: Arc<DbOption<R>>,
         compaction_rx: Receiver<CompactTask>,
         executor: E,
         schema: crate::Schema<R, E>,
@@ -1019,7 +1029,7 @@ pub(crate) mod tests {
 
         let schema = Arc::new(RwLock::new(schema));
 
-        let (mut cleaner, clean_sender) = Cleaner::<E>::new(option.clone());
+        let (mut cleaner, clean_sender) = Cleaner::<R, E>::new(option.clone());
         let version_set = build_version_set(version, clean_sender, option.clone()).await?;
         let mut compactor =
             Compactor::<R, E>::new(schema.clone(), option.clone(), version_set.clone());

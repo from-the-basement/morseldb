@@ -1,4 +1,4 @@
-use std::{mem, sync::Arc};
+use std::{mem, string::ToString, sync::Arc};
 
 use arrow::{
     array::{
@@ -8,13 +8,15 @@ use arrow::{
     datatypes::{DataType, Field, Schema, UInt32Type},
 };
 use once_cell::sync::Lazy;
-use parquet::arrow::ProjectionMask;
+use parquet::{arrow::ProjectionMask, format::SortingColumn, schema::types::ColumnPath};
 
 use super::{internal::InternalRecordRef, Key, Record, RecordRef};
 use crate::{
     inmem::immutable::{ArrowArrays, Builder},
     timestamp::Timestamped,
 };
+
+const PRIMARY_FIELD_NAME: &'static str = "vstring";
 
 impl Record for String {
     type Columns = StringColumns;
@@ -33,6 +35,16 @@ impl Record for String {
         2
     }
 
+    fn primary_key_path() -> (ColumnPath, Vec<SortingColumn>) {
+        (
+            ColumnPath::new(vec!["_ts".to_string(), PRIMARY_FIELD_NAME.to_string()]),
+            vec![
+                SortingColumn::new(1, true, true),
+                SortingColumn::new(2, false, true),
+            ],
+        )
+    }
+
     fn as_record_ref(&self) -> Self::Ref<'_> {
         self
     }
@@ -42,7 +54,7 @@ impl Record for String {
             Arc::new(Schema::new(vec![
                 Field::new("_null", DataType::Boolean, false),
                 Field::new("_ts", DataType::UInt32, false),
-                Field::new("vstring", DataType::Utf8, false),
+                Field::new(PRIMARY_FIELD_NAME, DataType::Utf8, false),
             ]))
         });
 

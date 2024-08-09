@@ -11,7 +11,7 @@ use parquet::{
     basic::{Compression, ZstdLevel},
     file::properties::WriterProperties,
 };
-use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt};
+use tokio::io::BufReader;
 
 use super::{arrows::get_range_filter, scan::SsTableScan};
 use crate::{
@@ -26,7 +26,7 @@ where
     R: Record,
     FP: FileProvider,
 {
-    file: FP::File,
+    reader: BufReader<FP::File>,
     _marker: PhantomData<R>,
 }
 
@@ -37,13 +37,13 @@ where
 {
     pub(crate) fn open(file: FP::File) -> Self {
         SsTable {
-            file,
+            reader: BufReader::new(file),
             _marker: PhantomData,
         }
     }
 
     #[allow(unused)]
-    fn create_writer(&mut self) -> AsyncArrowWriter<Compat<&mut dyn AsyncFile>> {
+    fn create_writer(&mut self) -> AsyncArrowWriter<&mut dyn AsyncFile> {
         // TODO: expose writer options
         let options = ArrowWriterOptions::new().with_properties(
             WriterProperties::builder()
@@ -52,7 +52,7 @@ where
                 .build(),
         );
         AsyncArrowWriter::try_new_with_options(
-            (&mut self.file as &mut dyn AsyncFile).compat(),
+            (&mut self.reader as &mut dyn AsyncFile),
             R::arrow_schema().clone(),
             options,
         )
@@ -79,9 +79,9 @@ where
         self,
         limit: Option<usize>,
         projection_mask: ProjectionMask,
-    ) -> parquet::errors::Result<ArrowReaderBuilder<AsyncReader<Compat<FP::File>>>> {
+    ) -> parquet::errors::Result<ArrowReaderBuilder<AsyncReader<BufReader<FP::File>>>> {
         let mut builder = ParquetRecordBatchStreamBuilder::new_with_options(
-            self.file.compat(),
+            self.reader,
             ArrowReaderOptions::default().with_page_index(true),
         )
         .await?;
