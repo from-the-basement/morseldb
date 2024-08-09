@@ -15,7 +15,7 @@ name = "benchmark"
 path = "benchmark/bench.rs"
 harness = false
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(unix)'.dev-dependencies]
 pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
 
 [dependencies]
