@@ -230,25 +230,6 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(
             let mut rng = make_rng();
             let start = Instant::now();
             let reader = txn.get_reader();
-            for _ in 0..READ_TIMES {
-                let record = gen_record(&mut rng);
-                let _ = reader.get(&record.primary_key).await;
-            }
-            let end = Instant::now();
-            let duration = end - start;
-            println!(
-                "{}: Random read {} items in {}ms",
-                T::db_type_name(),
-                READ_TIMES,
-                duration.as_millis()
-            );
-            results.push(("random reads".to_string(), duration));
-        }
-
-        for _ in 0..ITERATIONS {
-            let mut rng = make_rng();
-            let start = Instant::now();
-            let reader = txn.get_reader();
             let mut value_sum = 0;
             let num_scan = 10;
             for _ in 0..READ_TIMES {
@@ -311,7 +292,7 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(
     drop(txn);
 
     for num_threads in [4, 8, 16, 32] {
-        let mut rngs = make_rng_shards(num_threads, WRITE_TIMES);
+        let mut rngs = make_rng_shards(num_threads, READ_TIMES);
         let start = Instant::now();
 
         let futures = (0..num_threads).map(|_| {
@@ -320,10 +301,23 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(
 
             async move {
                 let txn = db2.read_transaction().await;
+                let num_scan = 10;
+                let mut value_sum = 0;
                 let reader = txn.get_reader();
-                for _ in 0..(WRITE_TIMES / num_threads) {
+                for _ in 0..(READ_TIMES / num_threads) {
                     let record = gen_record(&mut rng);
-                    let _ = reader.get(&record.primary_key);
+                    let mut iter = Box::pin(reader.projection_range_from((
+                        Bound::Included(&record.primary_key),
+                        Bound::Unbounded,
+                    )));
+                    for _ in 0..num_scan {
+                        if let Some(_projection_field) = iter.next().await {
+                            value_sum += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    assert!(value_sum > 0);
                 }
             }
         });
@@ -332,13 +326,16 @@ async fn benchmark<T: BenchDatabase + Send + Sync>(
         let end = Instant::now();
         let duration = end - start;
         println!(
-            "{}: Random read ({} threads) {} items in {}ms",
+            "{}: Random range projection reads ({} threads) {} items in {}ms",
             T::db_type_name(),
             num_threads,
             WRITE_TIMES,
             duration.as_millis()
         );
-        results.push((format!("random reads ({num_threads} threads)"), duration));
+        results.push((
+            format!("random range projection reads ({num_threads} threads)"),
+            duration,
+        ));
     }
 
     let start = Instant::now();
